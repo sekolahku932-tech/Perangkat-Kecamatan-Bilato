@@ -50,7 +50,8 @@ const DocumentManager: React.FC<DocumentManagerProps> = ({ user }) => {
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files;
     if (!selectedFiles) return;
-    Array.from(selectedFiles).forEach(file => {
+    // Explicitly cast to File[] to resolve type errors in some TS environments
+    (Array.from(selectedFiles) as File[]).forEach(file => {
       const reader = new FileReader();
       reader.onload = (ev) => {
         setFiles(prev => [...prev, { id: Math.random().toString(36), name: file.name, size: file.size, type: file.type, base64: ev.target?.result as string }]);

@@ -2,6 +2,9 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { UploadedFile, Kelas } from "../types";
 
+// Fungsi untuk memberikan jeda waktu (untuk menghindari rate limit)
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 const cleanAndParseJson = (str: any): any => {
   if (str === null || str === undefined) return null;
   if (typeof str !== 'string') return str;
@@ -31,22 +34,27 @@ const cleanAndParseJson = (str: any): any => {
 };
 
 const getAiClient = (apiKey: string) => {
-  if (!apiKey || apiKey.length < 10) throw new Error("API Key Personal tidak valid atau belum diisi di Profil.");
+  if (!apiKey || apiKey.length < 10) throw new Error("KUNCI API TIDAK VALID. Masukkan API Key di Profil.");
   return new GoogleGenAI({ apiKey });
 };
 
-// Menggunakan model yang lebih stabil untuk produksi jika Preview bermasalah
-const DEFAULT_MODEL = 'gemini-2.0-flash'; 
-const COMPLEX_MODEL = 'gemini-2.0-flash'; 
-const IMAGE_MODEL = 'gemini-2.5-flash-image';
-
+// MENGGUNAKAN MODEL GEMINI 3 (REKOMENDASI TERBARU)
+const FLASH_MODEL = 'gemini-3-flash-preview';
+const PRO_MODEL = 'gemini-3-pro-preview';
 const DPL_LIST = "Keimanan dan Ketakwaan terhadap Tuhan YME, Kewargaan, Penalaran Kritis, Kreativitas, Kolaborasi, Kemandirian, Kesehatan, Komunikasi";
+
+const safetySettings = [
+  { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+  { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+  { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+  { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+];
 
 export const startAIChat = async (apiKey: string, systemInstruction: string) => {
   const ai = getAiClient(apiKey);
   return ai.chats.create({
-    model: DEFAULT_MODEL,
-    config: { systemInstruction, temperature: 0.7 },
+    model: FLASH_MODEL,
+    config: { systemInstruction, temperature: 0.7, safetySettings },
   });
 };
 
@@ -57,29 +65,25 @@ export const analyzeDocuments = async (apiKey: string, files: UploadedFile[], pr
       inlineData: { data: file.base64.split(',')[1], mimeType: file.type }
     }));
     const response = await ai.models.generateContent({
-      model: DEFAULT_MODEL,
+      model: FLASH_MODEL,
       contents: { parts: [...fileParts, { text: prompt }] },
-      config: { systemInstruction: "Pakar Kurikulum SD Indonesia. Analisis dokumen dengan tajam dan solutif." }
+      config: { safetySettings }
     });
-    return response.text || "AI tidak memberikan respon.";
+    return response.text || "AI tidak merespon.";
   } catch (error: any) {
-    throw new Error(error.message || "Gagal menghubungi server Gemini.");
+    throw new Error(error.message || "Gagal menghubungi Gemini.");
   }
 };
 
 export const analyzeCPToTP = async (apiKey: string, cpContent: string, elemen: string, fase: string, kelas: string) => {
   try {
     const ai = getAiClient(apiKey);
-    const prompt = `Analisis Capaian Pembelajaran (CP) untuk Kelas ${kelas} SD. 
-    CP: "${cpContent}" 
-    Elemen: "${elemen}"
-    
-    TUGAS: Pecah menjadi TP (Tujuan Pembelajaran) dan tentukan Dimensi Profil Lulusan (DPL) yang relevan.
-    WAJIB GUNAKAN DPL DARI DAFTAR INI SAJA: ${DPL_LIST}.`;
+    const prompt = `Analisis CP Kelas ${kelas}. CP: "${cpContent}". Elemen: "${elemen}". Gunakan DPL: ${DPL_LIST}. Kembalikan JSON ARRAY.`;
 
     const response = await ai.models.generateContent({
-      model: COMPLEX_MODEL,
+      model: PRO_MODEL,
       config: {
+        safetySettings,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.ARRAY,
@@ -89,10 +93,9 @@ export const analyzeCPToTP = async (apiKey: string, cpContent: string, elemen: s
               materi: { type: Type.STRING },
               subMateri: { type: Type.STRING },
               tp: { type: Type.STRING },
-              profilLulusan: { type: Type.STRING, description: `Pilih dari: ${DPL_LIST}` }
+              profilLulusan: { type: Type.STRING }
             },
-            required: ['materi', 'subMateri', 'tp', 'profilLulusan'],
-            propertyOrdering: ['materi', 'subMateri', 'tp', 'profilLulusan']
+            required: ['materi', 'subMateri', 'tp', 'profilLulusan']
           }
         }
       },
@@ -100,21 +103,20 @@ export const analyzeCPToTP = async (apiKey: string, cpContent: string, elemen: s
     });
     return cleanAndParseJson(response.text);
   } catch (error: any) {
-    throw new Error(error.message || "Kesalahan pada layanan AI Gemini.");
+    const msg = error.message || "";
+    if (msg.includes("429")) throw new Error("Limit Quota Tercapai. Gunakan API Key yang sudah diaktivasi Billing atau tunggu beberapa saat.");
+    if (msg.includes("location")) throw new Error("Lokasi Server tidak didukung oleh API Key ini.");
+    throw new Error(msg || "Kesalahan teknis Gemini.");
   }
 };
 
 export const completeATPDetails = async (apiKey: string, tp: string, materi: string, kelas: string) => {
   try {
     const ai = getAiClient(apiKey);
-    const prompt = `Lengkapi rincian ATP SD Kelas ${kelas}. 
-    TP: "${tp}" 
-    Materi: "${materi}"
-    Pada bagian dimensiOfProfil, pilih Dimensi Profil Lulusan (DPL) yang paling sesuai dari daftar: ${DPL_LIST}.`;
-
     const response = await ai.models.generateContent({
-      model: DEFAULT_MODEL,
+      model: PRO_MODEL,
       config: {
+        safetySettings,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -130,20 +132,19 @@ export const completeATPDetails = async (apiKey: string, tp: string, materi: str
           required: ['alurTujuan', 'alokasiWaktu', 'dimensiOfProfil', 'asesmenAwal', 'asesmenProses', 'asesmenAkhir', 'sumberBelajar']
         }
       },
-      contents: prompt,
+      contents: `Lengkapi ATP: ${tp}, Materi: ${materi}`,
     });
     return cleanAndParseJson(response.text);
-  } catch (error: any) {
-    throw new Error(error.message || "Gagal melengkapi detail ATP.");
-  }
+  } catch (error: any) { throw new Error("Gagal melengkapi detail ATP."); }
 };
 
 export const recommendPedagogy = async (apiKey: string, tp: string, alurAtp: string, materi: string, kelas: string) => {
   try {
     const ai = getAiClient(apiKey);
     const response = await ai.models.generateContent({
-      model: DEFAULT_MODEL,
+      model: FLASH_MODEL,
       config: {
+        safetySettings,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -151,24 +152,19 @@ export const recommendPedagogy = async (apiKey: string, tp: string, alurAtp: str
           required: ['modelName', 'reason']
         }
       },
-      contents: `Rekomendasi model pembelajaran untuk TP: "${tp}"`,
+      contents: `Rekomendasi model untuk: ${tp}`,
     });
     return cleanAndParseJson(response.text);
-  } catch (error: any) { return null; }
+  } catch (e) { return null; }
 };
 
 export const generateRPMContent = async (apiKey: string, tp: string, materi: string, kelas: string, praktikPedagogis: string, alokasiWaktu: string, jumlahPertemuan: number = 1) => {
   try {
     const ai = getAiClient(apiKey);
-    const prompt = `Susun RPM mendalam untuk ${jumlahPertemuan} pertemuan. 
-    TP: "${tp}" 
-    Materi: "${materi}" 
-    Model: ${praktikPedagogis}. 
-    ATURAN: Berikan output dalam JSON yang rapi.`;
-
     const response = await ai.models.generateContent({
-      model: COMPLEX_MODEL,
+      model: PRO_MODEL,
       config: { 
+        safetySettings,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -183,20 +179,19 @@ export const generateRPMContent = async (apiKey: string, tp: string, materi: str
           required: ['kemitraan', 'lingkunganBelajar', 'pemanfaatanDigital', 'kegiatanAwal', 'kegiatanInti', 'kegiatanPenutup']
         }
       },
-      contents: prompt,
+      contents: `Susun RPM ${jumlahPertemuan} pertemuan: ${tp}`,
     });
     return cleanAndParseJson(response.text);
-  } catch (error: any) {
-    throw new Error(error.message || "Gagal menyusun RPM.");
-  }
+  } catch (error: any) { throw new Error("Gagal menyusun narasi RPM."); }
 };
 
 export const generateJournalNarrative = async (apiKey: string, kelas: string, mapel: string, materi: string, refRpm?: any) => {
   try {
     const ai = getAiClient(apiKey);
     const response = await ai.models.generateContent({
-      model: DEFAULT_MODEL,
+      model: FLASH_MODEL,
       config: {
+        safetySettings,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -204,18 +199,19 @@ export const generateJournalNarrative = async (apiKey: string, kelas: string, ma
           required: ['detail_kegiatan', 'pedagogik']
         }
       },
-      contents: `Narasi jurnal harian Kelas ${kelas}, Materi ${materi}`,
+      contents: `Buat narasi jurnal: Kelas ${kelas}, ${materi}`,
     });
     return cleanAndParseJson(response.text);
-  } catch (error: any) { return null; }
+  } catch (e) { return null; }
 };
 
 export const generateAssessmentDetails = async (apiKey: string, tp: string, materi: string, kelas: string, stepsContext: string) => {
   try {
     const ai = getAiClient(apiKey);
     const response = await ai.models.generateContent({
-      model: COMPLEX_MODEL,
+      model: PRO_MODEL,
       config: { 
+        safetySettings,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.ARRAY,
@@ -246,18 +242,19 @@ export const generateAssessmentDetails = async (apiKey: string, tp: string, mate
           }
         }
       },
-      contents: `Susun asesmen untuk TP: ${tp}`,
+      contents: `Asesmen untuk: ${tp}`,
     });
     return cleanAndParseJson(response.text);
-  } catch (error: any) { return null; }
+  } catch (e) { return null; }
 };
 
 export const generateLKPDContent = async (apiKey: string, rpm: any) => {
   try {
     const ai = getAiClient(apiKey);
     const response = await ai.models.generateContent({
-      model: DEFAULT_MODEL,
+      model: FLASH_MODEL,
       config: { 
+        safetySettings,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -272,29 +269,31 @@ export const generateLKPDContent = async (apiKey: string, rpm: any) => {
           required: ['petunjuk', 'alatBelajar', 'materiRingkas', 'langkahKerja', 'tugasMandiri', 'refleksi']
         }
       },
-      contents: `LKPD untuk ${rpm.tujuanPembelajaran}`,
+      contents: `LKPD untuk: ${rpm.tujuanPembelajaran}`,
     });
     return cleanAndParseJson(response.text);
-  } catch (error: any) { return null; }
+  } catch (e) { return null; }
 };
 
 export const generateIndikatorSoal = async (apiKey: string, item: any) => {
   try {
     const ai = getAiClient(apiKey);
     const response = await ai.models.generateContent({
-      model: DEFAULT_MODEL,
-      contents: `Indikator soal AKM Kelas ${item.kelas} TP: "${item.tujuanPembelajaran}"`
+      model: FLASH_MODEL,
+      config: { safetySettings },
+      contents: `Buat indikator soal untuk: ${item.tujuanPembelajaran}`
     });
     return response.text || "";
-  } catch (error: any) { return ""; }
+  } catch (e) { return ""; }
 };
 
 export const generateButirSoal = async (apiKey: string, item: any) => {
   try {
     const ai = getAiClient(apiKey);
     const response = await ai.models.generateContent({
-      model: COMPLEX_MODEL,
+      model: PRO_MODEL,
       config: {
+        safetySettings,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -302,23 +301,23 @@ export const generateButirSoal = async (apiKey: string, item: any) => {
           required: ["soal", "kunci"]
         }
       },
-      contents: `Soal AKM: ${item.indikatorSoal}`,
+      contents: `Buat soal untuk indikator: ${item.indikatorSoal}`,
     });
     return cleanAndParseJson(response.text);
-  } catch (error: any) { return null; }
+  } catch (e) { return null; }
 };
 
-export const generateAiImage = async (apiKey: string, context: string, kelas: string) => {
+export const generateAiImage = async (apiKey: string, prompt: string, kelas: string) => {
   try {
     const ai = getAiClient(apiKey);
     const response = await ai.models.generateContent({
-      model: IMAGE_MODEL,
+      model: 'gemini-2.5-flash-image',
+      contents: { parts: [{ text: `Ilustrasi SD Kelas ${kelas}: ${prompt}. Flat vector style.` }] },
       config: { imageConfig: { aspectRatio: "1:1" } },
-      contents: { parts: [{ text: `Flat education clipart SD Kelas ${kelas}: ${context.substring(0, 100)}` }] },
     });
-    for (const part of response.candidates?.[0]?.content?.parts || []) {
-      if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
+    for (const part of response.candidates[0].content.parts) {
+      if (part.inlineData) return part.inlineData.data;
     }
-  } catch (e) { console.error(e); }
-  return null;
+    return null;
+  } catch (error) { return null; }
 };

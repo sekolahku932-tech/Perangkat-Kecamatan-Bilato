@@ -98,7 +98,7 @@ const AnalisisManager: React.FC<AnalisisManagerProps> = ({ user }) => {
 
   const handleAnalyze = async (cp: CapaianPembelajaran) => {
     if (!user.apiKey) {
-      setMessage({ text: 'Kunci AI belum diisi di profil Anda!', type: 'error' });
+      setMessage({ text: 'KUNCI API BELUM DIISI. Silakan buka menu Profil.', type: 'error' });
       return;
     }
     setIsAnalyzing(true);
@@ -127,11 +127,14 @@ const AnalisisManager: React.FC<AnalisisManagerProps> = ({ user }) => {
         setTimeout(() => setMessage(null), 3000);
       }
     } catch (error: any) {
-      console.error(error);
-      const errMsg = error.message?.includes('403') ? "Akses Ditolak (CORS/Key Error)" : 
-                     error.message?.includes('429') ? "Kuota AI Habis" : 
-                     error.message || "Gagal memproses AI.";
-      setMessage({ text: `AI Error: ${errMsg}`, type: 'error' });
+      console.error("AI Error:", error);
+      const detail = error.message || "";
+      let userFriendlyMsg = detail;
+      if (detail.includes("429")) userFriendlyMsg = "KUOTA PENUH. Gunakan API Key berbayar atau tunggu 1 menit.";
+      if (detail.includes("location")) userFriendlyMsg = "REGION DIBLOKIR. Vercel berada di wilayah yang tidak didukung akun Free.";
+      if (detail.includes("403")) userFriendlyMsg = "API KEY ERROR. Periksa kembali kunci Anda di Google AI Studio.";
+      
+      setMessage({ text: `AI: ${userFriendlyMsg}`, type: 'error' });
     } finally {
       setIsAnalyzing(false);
     }
