@@ -1,0 +1,7 @@
+{
+  "name": "EduBilato - Portal Kurikulum Terpadu",
+  "description": "Sistem administrasi perangkat pembelajaran digital untuk 8 Sekolah Dasar di Kecamatan Bilato. Terhubung secara multitenant dengan asisten AI.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
