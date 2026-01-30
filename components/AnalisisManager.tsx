@@ -98,7 +98,7 @@ const AnalisisManager: React.FC<AnalisisManagerProps> = ({ user }) => {
 
   const handleAnalyze = async (cp: CapaianPembelajaran) => {
     if (!user.apiKey) {
-      alert("Kunci AI Anda hilang. Silakan refresh halaman atau login kembali.");
+      setMessage({ text: 'Kunci AI belum diisi di profil Anda!', type: 'error' });
       return;
     }
     setIsAnalyzing(true);
@@ -123,12 +123,15 @@ const AnalisisManager: React.FC<AnalisisManagerProps> = ({ user }) => {
             school: user.school
           });
         }
-        setMessage({ text: 'Analisis Berhasil menggunakan Kuota Gemini Personal!', type: 'success' });
+        setMessage({ text: 'Analisis Berhasil!', type: 'success' });
         setTimeout(() => setMessage(null), 3000);
       }
     } catch (error: any) {
       console.error(error);
-      setMessage({ text: 'AI Error: Gagal memproses permintaan.', type: 'error' });
+      const errMsg = error.message?.includes('403') ? "Akses Ditolak (CORS/Key Error)" : 
+                     error.message?.includes('429') ? "Kuota AI Habis" : 
+                     error.message || "Gagal memproses AI.";
+      setMessage({ text: `AI Error: ${errMsg}`, type: 'error' });
     } finally {
       setIsAnalyzing(false);
     }
@@ -235,6 +238,7 @@ const AnalisisManager: React.FC<AnalisisManagerProps> = ({ user }) => {
         }`}>
           {message.type === 'success' ? <CheckCircle2 size={20}/> : <AlertCircle size={20}/>}
           <span className="text-sm font-black uppercase tracking-tight">{message.text}</span>
+          <button onClick={() => setMessage(null)} className="ml-2 opacity-50 hover:opacity-100"><X size={14}/></button>
         </div>
       )}
 

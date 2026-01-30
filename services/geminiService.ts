@@ -31,12 +31,13 @@ const cleanAndParseJson = (str: any): any => {
 };
 
 const getAiClient = (apiKey: string) => {
-  if (!apiKey) throw new Error("API Key tidak ditemukan. Silakan hubungkan kembali kunci AI Anda.");
+  if (!apiKey || apiKey.length < 10) throw new Error("API Key Personal tidak valid atau belum diisi di Profil.");
   return new GoogleGenAI({ apiKey });
 };
 
-const DEFAULT_MODEL = 'gemini-3-flash-preview';
-const COMPLEX_MODEL = 'gemini-3-pro-preview'; 
+// Menggunakan model yang lebih stabil untuk produksi jika Preview bermasalah
+const DEFAULT_MODEL = 'gemini-2.0-flash'; 
+const COMPLEX_MODEL = 'gemini-2.0-flash'; 
 const IMAGE_MODEL = 'gemini-2.5-flash-image';
 
 const DPL_LIST = "Keimanan dan Ketakwaan terhadap Tuhan YME, Kewargaan, Penalaran Kritis, Kreativitas, Kolaborasi, Kemandirian, Kesehatan, Komunikasi";
@@ -50,273 +51,266 @@ export const startAIChat = async (apiKey: string, systemInstruction: string) => 
 };
 
 export const analyzeDocuments = async (apiKey: string, files: UploadedFile[], prompt: string) => {
-  const ai = getAiClient(apiKey);
-  const fileParts = files.map(file => ({
-    inlineData: { data: file.base64.split(',')[1], mimeType: file.type }
-  }));
-  const response = await ai.models.generateContent({
-    model: DEFAULT_MODEL,
-    contents: { parts: [...fileParts, { text: prompt }] },
-    config: { systemInstruction: "Pakar Kurikulum SD Indonesia. Analisis dokumen dengan tajam dan solutif." }
-  });
-  return response.text || "AI tidak merespon.";
+  try {
+    const ai = getAiClient(apiKey);
+    const fileParts = files.map(file => ({
+      inlineData: { data: file.base64.split(',')[1], mimeType: file.type }
+    }));
+    const response = await ai.models.generateContent({
+      model: DEFAULT_MODEL,
+      contents: { parts: [...fileParts, { text: prompt }] },
+      config: { systemInstruction: "Pakar Kurikulum SD Indonesia. Analisis dokumen dengan tajam dan solutif." }
+    });
+    return response.text || "AI tidak memberikan respon.";
+  } catch (error: any) {
+    throw new Error(error.message || "Gagal menghubungi server Gemini.");
+  }
 };
 
 export const analyzeCPToTP = async (apiKey: string, cpContent: string, elemen: string, fase: string, kelas: string) => {
-  const ai = getAiClient(apiKey);
-  const prompt = `Analisis Capaian Pembelajaran (CP) untuk Kelas ${kelas} SD. 
-  CP: "${cpContent}" 
-  Elemen: "${elemen}"
-  
-  TUGAS: Pecah menjadi TP (Tujuan Pembelajaran) dan tentukan Dimensi Profil Lulusan (DPL) yang relevan.
-  WAJIB GUNAKAN DPL DARI DAFTAR INI SAJA: ${DPL_LIST}.`;
+  try {
+    const ai = getAiClient(apiKey);
+    const prompt = `Analisis Capaian Pembelajaran (CP) untuk Kelas ${kelas} SD. 
+    CP: "${cpContent}" 
+    Elemen: "${elemen}"
+    
+    TUGAS: Pecah menjadi TP (Tujuan Pembelajaran) dan tentukan Dimensi Profil Lulusan (DPL) yang relevan.
+    WAJIB GUNAKAN DPL DARI DAFTAR INI SAJA: ${DPL_LIST}.`;
 
-  const response = await ai.models.generateContent({
-    model: COMPLEX_MODEL,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            materi: { type: Type.STRING },
-            subMateri: { type: Type.STRING },
-            tp: { type: Type.STRING },
-            profilLulusan: { type: Type.STRING, description: `Pilih dari: ${DPL_LIST}` }
-          },
-          required: ['materi', 'subMateri', 'tp', 'profilLulusan'],
-          propertyOrdering: ['materi', 'subMateri', 'tp', 'profilLulusan']
+    const response = await ai.models.generateContent({
+      model: COMPLEX_MODEL,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              materi: { type: Type.STRING },
+              subMateri: { type: Type.STRING },
+              tp: { type: Type.STRING },
+              profilLulusan: { type: Type.STRING, description: `Pilih dari: ${DPL_LIST}` }
+            },
+            required: ['materi', 'subMateri', 'tp', 'profilLulusan'],
+            propertyOrdering: ['materi', 'subMateri', 'tp', 'profilLulusan']
+          }
         }
-      }
-    },
-    contents: prompt,
-  });
-  return cleanAndParseJson(response.text);
+      },
+      contents: prompt,
+    });
+    return cleanAndParseJson(response.text);
+  } catch (error: any) {
+    throw new Error(error.message || "Kesalahan pada layanan AI Gemini.");
+  }
 };
 
 export const completeATPDetails = async (apiKey: string, tp: string, materi: string, kelas: string) => {
-  const ai = getAiClient(apiKey);
-  const prompt = `Lengkapi rincian ATP SD Kelas ${kelas}. 
-  TP: "${tp}" 
-  Materi: "${materi}"
-  
-  Pada bagian dimensiOfProfil, pilih Dimensi Profil Lulusan (DPL) yang paling sesuai dari daftar: ${DPL_LIST}.`;
+  try {
+    const ai = getAiClient(apiKey);
+    const prompt = `Lengkapi rincian ATP SD Kelas ${kelas}. 
+    TP: "${tp}" 
+    Materi: "${materi}"
+    Pada bagian dimensiOfProfil, pilih Dimensi Profil Lulusan (DPL) yang paling sesuai dari daftar: ${DPL_LIST}.`;
 
-  const response = await ai.models.generateContent({
-    model: DEFAULT_MODEL,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          alurTujuan: { type: Type.STRING },
-          alokasiWaktu: { type: Type.STRING },
-          dimensiOfProfil: { type: Type.STRING, description: `Gunakan daftar DPL: ${DPL_LIST}` },
-          asesmenAwal: { type: Type.STRING },
-          asesmenProses: { type: Type.STRING },
-          asesmenAkhir: { type: Type.STRING },
-          sumberBelajar: { type: Type.STRING }
-        },
-        required: ['alurTujuan', 'alokasiWaktu', 'dimensiOfProfil', 'asesmenAwal', 'asesmenProses', 'asesmenAkhir', 'sumberBelajar']
-      }
-    },
-    contents: prompt,
-  });
-  return cleanAndParseJson(response.text);
+    const response = await ai.models.generateContent({
+      model: DEFAULT_MODEL,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            alurTujuan: { type: Type.STRING },
+            alokasiWaktu: { type: Type.STRING },
+            dimensiOfProfil: { type: Type.STRING },
+            asesmenAwal: { type: Type.STRING },
+            asesmenProses: { type: Type.STRING },
+            asesmenAkhir: { type: Type.STRING },
+            sumberBelajar: { type: Type.STRING }
+          },
+          required: ['alurTujuan', 'alokasiWaktu', 'dimensiOfProfil', 'asesmenAwal', 'asesmenProses', 'asesmenAkhir', 'sumberBelajar']
+        }
+      },
+      contents: prompt,
+    });
+    return cleanAndParseJson(response.text);
+  } catch (error: any) {
+    throw new Error(error.message || "Gagal melengkapi detail ATP.");
+  }
 };
 
 export const recommendPedagogy = async (apiKey: string, tp: string, alurAtp: string, materi: string, kelas: string) => {
-  const ai = getAiClient(apiKey);
-  const response = await ai.models.generateContent({
-    model: DEFAULT_MODEL,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: { modelName: { type: Type.STRING }, reason: { type: Type.STRING } },
-        required: ['modelName', 'reason']
-      }
-    },
-    contents: `Rekomendasi model pembelajaran untuk TP: "${tp}"`,
-  });
-  return cleanAndParseJson(response.text);
+  try {
+    const ai = getAiClient(apiKey);
+    const response = await ai.models.generateContent({
+      model: DEFAULT_MODEL,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: { modelName: { type: Type.STRING }, reason: { type: Type.STRING } },
+          required: ['modelName', 'reason']
+        }
+      },
+      contents: `Rekomendasi model pembelajaran untuk TP: "${tp}"`,
+    });
+    return cleanAndParseJson(response.text);
+  } catch (error: any) { return null; }
 };
 
 export const generateRPMContent = async (apiKey: string, tp: string, materi: string, kelas: string, praktikPedagogis: string, alokasiWaktu: string, jumlahPertemuan: number = 1) => {
-  const ai = getAiClient(apiKey);
-  const prompt = `Susun RPM mendalam untuk ${jumlahPertemuan} pertemuan. 
-  TP: "${tp}" 
-  Materi: "${materi}" 
-  Model: ${praktikPedagogis}. 
-  
-  ATURAN WAJIB FORMAT & KONTEN:
-  1. Daftar Langkah: Gunakan daftar bernomor urut ke bawah (1., 2., 3., dst.). Setiap langkah dipisah Baris Baru (Enter).
-  2. Integrasi Filosofi: Setiap poin langkah kegiatan HARUS mengintegrasikan minimal salah satu dari elemen: [Menggembirakan], [Berkesadaran], atau [Bermakna].
-  3. POSISI TAG: Letakkan tag filosofi tersebut di AKHIR kalimat langkah kegiatan.
-  4. Contoh Format: "1. Guru mengajak siswa bernyanyi bersama untuk membangun suasana ceria [Menggembirakan]."
-  5. Bagian INTI: Gunakan sub-label: A. MEMAHAMI, B. MENGAPLIKASI, C. MEREFLEKSI.
-  6. Pertemuan: Gunakan label "Pertemuan X:" sebagai pemisah antar pertemuan.`;
+  try {
+    const ai = getAiClient(apiKey);
+    const prompt = `Susun RPM mendalam untuk ${jumlahPertemuan} pertemuan. 
+    TP: "${tp}" 
+    Materi: "${materi}" 
+    Model: ${praktikPedagogis}. 
+    ATURAN: Berikan output dalam JSON yang rapi.`;
 
-  const response = await ai.models.generateContent({
-    model: COMPLEX_MODEL,
-    config: { 
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          kemitraan: { type: Type.STRING },
-          lingkunganBelajar: { type: Type.STRING },
-          pemanfaatanDigital: { type: Type.STRING },
-          kegiatanAwal: { type: Type.STRING, description: "Daftar bernomor dengan tag filosofi di akhir kalimat" },
-          kegiatanInti: { type: Type.STRING, description: "Daftar bernomor A,B,C dengan tag filosofi di akhir kalimat" },
-          kegiatanPenutup: { type: Type.STRING, description: "Daftar bernomor dengan tag filosofi di akhir kalimat" }
-        },
-        required: ['kemitraan', 'lingkunganBelajar', 'pemanfaatanDigital', 'kegiatanAwal', 'kegiatanInti', 'kegiatanPenutup']
-      }
-    },
-    contents: prompt,
-  });
-  return cleanAndParseJson(response.text);
+    const response = await ai.models.generateContent({
+      model: COMPLEX_MODEL,
+      config: { 
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            kemitraan: { type: Type.STRING },
+            lingkunganBelajar: { type: Type.STRING },
+            pemanfaatanDigital: { type: Type.STRING },
+            kegiatanAwal: { type: Type.STRING },
+            kegiatanInti: { type: Type.STRING },
+            kegiatanPenutup: { type: Type.STRING }
+          },
+          required: ['kemitraan', 'lingkunganBelajar', 'pemanfaatanDigital', 'kegiatanAwal', 'kegiatanInti', 'kegiatanPenutup']
+        }
+      },
+      contents: prompt,
+    });
+    return cleanAndParseJson(response.text);
+  } catch (error: any) {
+    throw new Error(error.message || "Gagal menyusun RPM.");
+  }
 };
 
 export const generateJournalNarrative = async (apiKey: string, kelas: string, mapel: string, materi: string, refRpm?: any) => {
-  const ai = getAiClient(apiKey);
-  const contextPrompt = `Tulis narasi log jurnal harian mengajar Kelas ${kelas}, Mapel ${mapel}, Materi ${materi}.`;
-  
-  const response = await ai.models.generateContent({
-    model: DEFAULT_MODEL,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: { 
-          detail_kegiatan: { type: Type.STRING }, 
-          pedagogik: { type: Type.STRING } 
-        },
-        required: ['detail_kegiatan', 'pedagogik']
-      }
-    },
-    contents: contextPrompt,
-  });
-  return cleanAndParseJson(response.text);
+  try {
+    const ai = getAiClient(apiKey);
+    const response = await ai.models.generateContent({
+      model: DEFAULT_MODEL,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: { detail_kegiatan: { type: Type.STRING }, pedagogik: { type: Type.STRING } },
+          required: ['detail_kegiatan', 'pedagogik']
+        }
+      },
+      contents: `Narasi jurnal harian Kelas ${kelas}, Materi ${materi}`,
+    });
+    return cleanAndParseJson(response.text);
+  } catch (error: any) { return null; }
 };
 
 export const generateAssessmentDetails = async (apiKey: string, tp: string, materi: string, kelas: string, stepsContext: string) => {
-  const ai = getAiClient(apiKey);
-  const prompt = `Berdasarkan Konteks Langkah Pembelajaran berikut: "${stepsContext}", susunlah instrumen asesmen yang sinkron untuk TP: "${tp}".
-  
-  ATURAN WAJIB:
-  1. Anda HARUS menghasilkan minimal satu item untuk masing-masing kategori berikut: "Asesmen Awal", "Asesmen Proses", dan "Asesmen Akhir".
-  2. Gunakan label kategori PERSIS seperti aturan nomor 1 (Asesmen Awal, Asesmen Proses, Asesmen Akhir).
-  3. Rubrik Detail harus memiliki minimal 3 aspek penilaian.`;
-
-  const response = await ai.models.generateContent({
-    model: COMPLEX_MODEL,
-    config: { 
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            kategori: { type: Type.STRING, description: "Wajib: Asesmen Awal, Asesmen Proses, atau Asesmen Akhir" },
-            teknik: { type: Type.STRING },
-            bentuk: { type: Type.STRING },
-            instruksi: { type: Type.STRING },
-            soalAtauTugas: { type: Type.STRING },
-            rubrikDetail: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  aspek: { type: Type.STRING },
-                  level4: { type: Type.STRING },
-                  level3: { type: Type.STRING },
-                  level2: { type: Type.STRING },
-                  level1: { type: Type.STRING }
-                },
-                required: ['aspek', 'level4', 'level3', 'level2', 'level1']
+  try {
+    const ai = getAiClient(apiKey);
+    const response = await ai.models.generateContent({
+      model: COMPLEX_MODEL,
+      config: { 
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              kategori: { type: Type.STRING },
+              teknik: { type: Type.STRING },
+              bentuk: { type: Type.STRING },
+              instruksi: { type: Type.STRING },
+              soalAtauTugas: { type: Type.STRING },
+              rubrikDetail: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    aspek: { type: Type.STRING },
+                    level4: { type: Type.STRING },
+                    level3: { type: Type.STRING },
+                    level2: { type: Type.STRING },
+                    level1: { type: Type.STRING }
+                  },
+                  required: ['aspek', 'level4', 'level3', 'level2', 'level1']
+                }
               }
-            }
-          },
-          required: ['kategori', 'teknik', 'bentuk', 'instruksi', 'soalAtauTugas', 'rubrikDetail'],
-          propertyOrdering: ['kategori', 'teknik', 'bentuk', 'instruksi', 'soalAtauTugas', 'rubrikDetail']
+            },
+            required: ['kategori', 'teknik', 'bentuk', 'instruksi', 'soalAtauTugas', 'rubrikDetail']
+          }
         }
-      }
-    },
-    contents: prompt,
-  });
-  return cleanAndParseJson(response.text);
+      },
+      contents: `Susun asesmen untuk TP: ${tp}`,
+    });
+    return cleanAndParseJson(response.text);
+  } catch (error: any) { return null; }
 };
 
 export const generateLKPDContent = async (apiKey: string, rpm: any) => {
-  const ai = getAiClient(apiKey);
-  const prompt = `Susun LKPD sinkron RPM. 
-  TP: "${rpm.tujuanPembelajaran}" 
-  MATERI: "${rpm.materi}"
-  
-  Gunakan format daftar bernomor vertikal (1., 2., 3.) untuk instruksi tugas agar mudah dibaca siswa.`;
-
-  const response = await ai.models.generateContent({
-    model: DEFAULT_MODEL,
-    config: { 
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          petunjuk: { type: Type.STRING },
-          alatBelajar: { type: Type.STRING },
-          materiRingkas: { type: Type.STRING },
-          langkahKerja: { type: Type.STRING },
-          tugasMandiri: { type: Type.STRING },
-          refleksi: { type: Type.STRING }
-        },
-        required: ['petunjuk', 'alatBelajar', 'materiRingkas', 'langkahKerja', 'tugasMandiri', 'refleksi']
-      }
-    },
-    contents: prompt,
-  });
-  return cleanAndParseJson(response.text);
+  try {
+    const ai = getAiClient(apiKey);
+    const response = await ai.models.generateContent({
+      model: DEFAULT_MODEL,
+      config: { 
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            petunjuk: { type: Type.STRING },
+            alatBelajar: { type: Type.STRING },
+            materiRingkas: { type: Type.STRING },
+            langkahKerja: { type: Type.STRING },
+            tugasMandiri: { type: Type.STRING },
+            refleksi: { type: Type.STRING }
+          },
+          required: ['petunjuk', 'alatBelajar', 'materiRingkas', 'langkahKerja', 'tugasMandiri', 'refleksi']
+        }
+      },
+      contents: `LKPD untuk ${rpm.tujuanPembelajaran}`,
+    });
+    return cleanAndParseJson(response.text);
+  } catch (error: any) { return null; }
 };
 
 export const generateIndikatorSoal = async (apiKey: string, item: any) => {
-  const ai = getAiClient(apiKey);
-  const prompt = `Buat 1 baris indikator soal AKM Kelas ${item.kelas} TP: "${item.tujuanPembelajaran}".`;
-
-  const response = await ai.models.generateContent({
-    model: DEFAULT_MODEL,
-    contents: prompt
-  });
-  return response.text || "";
+  try {
+    const ai = getAiClient(apiKey);
+    const response = await ai.models.generateContent({
+      model: DEFAULT_MODEL,
+      contents: `Indikator soal AKM Kelas ${item.kelas} TP: "${item.tujuanPembelajaran}"`
+    });
+    return response.text || "";
+  } catch (error: any) { return ""; }
 };
 
 export const generateButirSoal = async (apiKey: string, item: any) => {
-  const ai = getAiClient(apiKey);
-  const prompt = `Susun butir soal Kelas ${item.kelas}. Indikator: "${item.indikatorSoal}". Bentuk: ${item.bentukSoal}`;
-
-  const response = await ai.models.generateContent({
-    model: COMPLEX_MODEL,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          stimulus: { type: Type.STRING },
-          soal: { type: Type.STRING },
-          kunci: { type: Type.STRING }
-        },
-        required: ["soal", "kunci"]
-      }
-    },
-    contents: prompt,
-  });
-  return cleanAndParseJson(response.text);
+  try {
+    const ai = getAiClient(apiKey);
+    const response = await ai.models.generateContent({
+      model: COMPLEX_MODEL,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: { stimulus: { type: Type.STRING }, soal: { type: Type.STRING }, kunci: { type: Type.STRING } },
+          required: ["soal", "kunci"]
+        }
+      },
+      contents: `Soal AKM: ${item.indikatorSoal}`,
+    });
+    return cleanAndParseJson(response.text);
+  } catch (error: any) { return null; }
 };
 
 export const generateAiImage = async (apiKey: string, context: string, kelas: string) => {
-  const ai = getAiClient(apiKey);
   try {
+    const ai = getAiClient(apiKey);
     const response = await ai.models.generateContent({
       model: IMAGE_MODEL,
       config: { imageConfig: { aspectRatio: "1:1" } },
