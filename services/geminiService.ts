@@ -2,8 +2,36 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { UploadedFile, Kelas } from "../types";
 
-// Fungsi untuk memberikan jeda waktu (untuk menghindari rate limit)
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+// Fungsi untuk memberikan jeda waktu dengan jitter (acak) untuk menghindari tabrakan rate limit
+const sleep = (ms: number) => {
+  const jitter = Math.random() * 1000;
+  return new Promise(resolve => setTimeout(resolve, ms + jitter));
+};
+
+/**
+ * Fungsi pembungkus untuk memanggil AI dengan logika Retry otomatis yang lebih kuat
+ */
+async function callAiWithRetry(fn: () => Promise<any>, retries = 4, delay = 3000): Promise<any> {
+  try {
+    return await fn();
+  } catch (error: any) {
+    const errorMsg = error.message?.toLowerCase() || "";
+    const isQuotaError = errorMsg.includes("429") || errorMsg.includes("quota") || errorMsg.includes("rate limit");
+    
+    if (isQuotaError && retries > 0) {
+      console.warn(`Kuota/Rate Limit tercapai. Mencoba ulang dalam ${delay}ms... (${retries} sisa percobaan)`);
+      await sleep(delay);
+      return callAiWithRetry(fn, retries - 1, delay * 2); // Exponential backoff
+    }
+    
+    // Jika error karena lokasi (403), berikan pesan yang jelas
+    if (errorMsg.includes("location") || errorMsg.includes("403")) {
+      throw new Error("Layanan AI tidak tersedia di wilayah server ini (Region Block). Gunakan API Key yang sudah diaktivasi Billing.");
+    }
+    
+    throw error;
+  }
+}
 
 const cleanAndParseJson = (str: any): any => {
   if (str === null || str === undefined) return null;
@@ -34,14 +62,14 @@ const cleanAndParseJson = (str: any): any => {
 };
 
 const getAiClient = (apiKey: string) => {
-  if (!apiKey || apiKey.length < 10) throw new Error("KUNCI API TIDAK VALID. Masukkan API Key di Profil.");
+  if (!apiKey || apiKey.length < 10) throw new Error("KUNCI API TIDAK VALID. Periksa kembali di Profil.");
   return new GoogleGenAI({ apiKey });
 };
 
-// MENGGUNAKAN MODEL GEMINI 3 (REKOMENDASI TERBARU)
-const FLASH_MODEL = 'gemini-3-flash-preview';
-const PRO_MODEL = 'gemini-3-pro-preview';
-const DPL_LIST = "Keimanan dan Ketakwaan terhadap Tuhan YME, Kewargaan, Penalaran Kritis, Kreativitas, Kolaborasi, Kemandirian, Kesehatan, Komunikasi";
+// GLOBAL MODEL SETTINGS - MENGGUNAKAN GEMINI 3 FLASH UNTUK SEMUANYA
+const MAIN_MODEL = 'gemini-3-flash-preview';
+const IMAGE_MODEL = 'gemini-2.5-flash-image';
+const DPL_LIST = "Beriman, Bertakwa, Berakhlak Mulia, Berkebinekaan Global, Bergotong Royong, Mandiri, Bernalar Kritis, Kreatif";
 
 const safetySettings = [
   { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
@@ -53,35 +81,33 @@ const safetySettings = [
 export const startAIChat = async (apiKey: string, systemInstruction: string) => {
   const ai = getAiClient(apiKey);
   return ai.chats.create({
-    model: FLASH_MODEL,
+    model: MAIN_MODEL,
     config: { systemInstruction, temperature: 0.7, safetySettings },
   });
 };
 
 export const analyzeDocuments = async (apiKey: string, files: UploadedFile[], prompt: string) => {
-  try {
+  return callAiWithRetry(async () => {
     const ai = getAiClient(apiKey);
     const fileParts = files.map(file => ({
       inlineData: { data: file.base64.split(',')[1], mimeType: file.type }
     }));
     const response = await ai.models.generateContent({
-      model: FLASH_MODEL,
+      model: MAIN_MODEL,
       contents: { parts: [...fileParts, { text: prompt }] },
       config: { safetySettings }
     });
     return response.text || "AI tidak merespon.";
-  } catch (error: any) {
-    throw new Error(error.message || "Gagal menghubungi Gemini.");
-  }
+  });
 };
 
 export const analyzeCPToTP = async (apiKey: string, cpContent: string, elemen: string, fase: string, kelas: string) => {
-  try {
+  return callAiWithRetry(async () => {
     const ai = getAiClient(apiKey);
     const prompt = `Analisis CP Kelas ${kelas}. CP: "${cpContent}". Elemen: "${elemen}". Gunakan DPL: ${DPL_LIST}. Kembalikan JSON ARRAY.`;
 
     const response = await ai.models.generateContent({
-      model: PRO_MODEL,
+      model: MAIN_MODEL,
       config: {
         safetySettings,
         responseMimeType: "application/json",
@@ -102,19 +128,14 @@ export const analyzeCPToTP = async (apiKey: string, cpContent: string, elemen: s
       contents: prompt,
     });
     return cleanAndParseJson(response.text);
-  } catch (error: any) {
-    const msg = error.message || "";
-    if (msg.includes("429")) throw new Error("Limit Quota Tercapai. Gunakan API Key yang sudah diaktivasi Billing atau tunggu beberapa saat.");
-    if (msg.includes("location")) throw new Error("Lokasi Server tidak didukung oleh API Key ini.");
-    throw new Error(msg || "Kesalahan teknis Gemini.");
-  }
+  });
 };
 
 export const completeATPDetails = async (apiKey: string, tp: string, materi: string, kelas: string) => {
-  try {
+  return callAiWithRetry(async () => {
     const ai = getAiClient(apiKey);
     const response = await ai.models.generateContent({
-      model: PRO_MODEL,
+      model: MAIN_MODEL,
       config: {
         safetySettings,
         responseMimeType: "application/json",
@@ -135,14 +156,14 @@ export const completeATPDetails = async (apiKey: string, tp: string, materi: str
       contents: `Lengkapi ATP: ${tp}, Materi: ${materi}`,
     });
     return cleanAndParseJson(response.text);
-  } catch (error: any) { throw new Error("Gagal melengkapi detail ATP."); }
+  });
 };
 
 export const recommendPedagogy = async (apiKey: string, tp: string, alurAtp: string, materi: string, kelas: string) => {
-  try {
+  return callAiWithRetry(async () => {
     const ai = getAiClient(apiKey);
     const response = await ai.models.generateContent({
-      model: FLASH_MODEL,
+      model: MAIN_MODEL,
       config: {
         safetySettings,
         responseMimeType: "application/json",
@@ -155,14 +176,14 @@ export const recommendPedagogy = async (apiKey: string, tp: string, alurAtp: str
       contents: `Rekomendasi model untuk: ${tp}`,
     });
     return cleanAndParseJson(response.text);
-  } catch (e) { return null; }
+  });
 };
 
 export const generateRPMContent = async (apiKey: string, tp: string, materi: string, kelas: string, praktikPedagogis: string, alokasiWaktu: string, jumlahPertemuan: number = 1) => {
-  try {
+  return callAiWithRetry(async () => {
     const ai = getAiClient(apiKey);
     const response = await ai.models.generateContent({
-      model: PRO_MODEL,
+      model: MAIN_MODEL,
       config: { 
         safetySettings,
         responseMimeType: "application/json",
@@ -182,14 +203,14 @@ export const generateRPMContent = async (apiKey: string, tp: string, materi: str
       contents: `Susun RPM ${jumlahPertemuan} pertemuan: ${tp}`,
     });
     return cleanAndParseJson(response.text);
-  } catch (error: any) { throw new Error("Gagal menyusun narasi RPM."); }
+  });
 };
 
 export const generateJournalNarrative = async (apiKey: string, kelas: string, mapel: string, materi: string, refRpm?: any) => {
-  try {
+  return callAiWithRetry(async () => {
     const ai = getAiClient(apiKey);
     const response = await ai.models.generateContent({
-      model: FLASH_MODEL,
+      model: MAIN_MODEL,
       config: {
         safetySettings,
         responseMimeType: "application/json",
@@ -202,14 +223,14 @@ export const generateJournalNarrative = async (apiKey: string, kelas: string, ma
       contents: `Buat narasi jurnal: Kelas ${kelas}, ${materi}`,
     });
     return cleanAndParseJson(response.text);
-  } catch (e) { return null; }
+  });
 };
 
 export const generateAssessmentDetails = async (apiKey: string, tp: string, materi: string, kelas: string, stepsContext: string) => {
-  try {
+  return callAiWithRetry(async () => {
     const ai = getAiClient(apiKey);
     const response = await ai.models.generateContent({
-      model: PRO_MODEL,
+      model: MAIN_MODEL,
       config: { 
         safetySettings,
         responseMimeType: "application/json",
@@ -245,14 +266,14 @@ export const generateAssessmentDetails = async (apiKey: string, tp: string, mate
       contents: `Asesmen untuk: ${tp}`,
     });
     return cleanAndParseJson(response.text);
-  } catch (e) { return null; }
+  });
 };
 
 export const generateLKPDContent = async (apiKey: string, rpm: any) => {
-  try {
+  return callAiWithRetry(async () => {
     const ai = getAiClient(apiKey);
     const response = await ai.models.generateContent({
-      model: FLASH_MODEL,
+      model: MAIN_MODEL,
       config: { 
         safetySettings,
         responseMimeType: "application/json",
@@ -272,26 +293,26 @@ export const generateLKPDContent = async (apiKey: string, rpm: any) => {
       contents: `LKPD untuk: ${rpm.tujuanPembelajaran}`,
     });
     return cleanAndParseJson(response.text);
-  } catch (e) { return null; }
+  });
 };
 
 export const generateIndikatorSoal = async (apiKey: string, item: any) => {
-  try {
+  return callAiWithRetry(async () => {
     const ai = getAiClient(apiKey);
     const response = await ai.models.generateContent({
-      model: FLASH_MODEL,
+      model: MAIN_MODEL,
       config: { safetySettings },
       contents: `Buat indikator soal untuk: ${item.tujuanPembelajaran}`
     });
     return response.text || "";
-  } catch (e) { return ""; }
+  });
 };
 
 export const generateButirSoal = async (apiKey: string, item: any) => {
-  try {
+  return callAiWithRetry(async () => {
     const ai = getAiClient(apiKey);
     const response = await ai.models.generateContent({
-      model: PRO_MODEL,
+      model: MAIN_MODEL,
       config: {
         safetySettings,
         responseMimeType: "application/json",
@@ -304,14 +325,14 @@ export const generateButirSoal = async (apiKey: string, item: any) => {
       contents: `Buat soal untuk indikator: ${item.indikatorSoal}`,
     });
     return cleanAndParseJson(response.text);
-  } catch (e) { return null; }
+  });
 };
 
 export const generateAiImage = async (apiKey: string, prompt: string, kelas: string) => {
-  try {
+  return callAiWithRetry(async () => {
     const ai = getAiClient(apiKey);
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
+      model: IMAGE_MODEL,
       contents: { parts: [{ text: `Ilustrasi SD Kelas ${kelas}: ${prompt}. Flat vector style.` }] },
       config: { imageConfig: { aspectRatio: "1:1" } },
     });
@@ -319,5 +340,5 @@ export const generateAiImage = async (apiKey: string, prompt: string, kelas: str
       if (part.inlineData) return part.inlineData.data;
     }
     return null;
-  } catch (error) { return null; }
+  });
 };
