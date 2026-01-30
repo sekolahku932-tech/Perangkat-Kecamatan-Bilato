@@ -25,6 +25,7 @@ import AsesmenManager from './components/AsesmenManager';
 import AIAssistant from './components/AIAssistant';
 import LoginPage from './components/LoginPage';
 import SchoolSelectionPage from './components/SchoolSelectionPage';
+import KeyLockScreen from './components/KeyLockScreen'; // IMPORT KOMPONEN BARU
 import { User } from './types';
 import { auth, db, onAuthStateChanged, signOut, doc, onSnapshot, getFirebaseInstance } from './services/firebase';
 
@@ -37,24 +38,20 @@ const App: React.FC = () => {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   useEffect(() => {
-    // Jika sekolah belum dipilih, hentikan loading dan tampilkan pemilihan sekolah
     if (!selectedSchool) {
       setLoading(false);
       return;
     }
 
     setLoading(true);
-    // Ambil auth instance khusus untuk project sekolah yang dipilih
     const { auth: currentAuth } = getFirebaseInstance();
 
     const unsubscribe = onAuthStateChanged(currentAuth, async (firebaseUser) => {
       if (firebaseUser) {
-        // Ambil data profil dari Firestore project sekolah tersebut
         const unsubUser = onSnapshot(doc(db, "users", firebaseUser.uid), (snap) => {
           if (snap.exists()) {
             setUser({ id: firebaseUser.uid, ...snap.data() } as User);
           } else {
-            // Auto-create admin profil jika belum ada di project baru tersebut
             setUser({ 
               id: firebaseUser.uid, 
               username: firebaseUser.email?.split('@')[0] || 'admin', 
@@ -83,11 +80,9 @@ const App: React.FC = () => {
   }, [selectedSchool]);
 
   const handleSelectSchool = (school: string) => {
-    // Simpan ke localStorage agar getFirebaseInstance() tahu project mana yang harus dimuat
     localStorage.setItem('selected_school', school);
-    // Update state untuk memicu re-render dan re-inisialisasi Firebase di useEffect
     setSelectedSchool(school);
-    setUser(null); // Reset user agar kembali ke halaman login project baru
+    setUser(null);
   };
 
   const handleLogout = async () => {
@@ -134,6 +129,13 @@ const App: React.FC = () => {
       }} 
     />
   );
+
+  // LOGIC GATE: Jika API Key belum diisi, tampilkan KeyLockScreen
+  // Pengecualian: Admin tetap bisa masuk tanpa API Key untuk mengelola user jika perlu, 
+  // namun di sini kita terapkan ke SEMUA user (termasuk admin) agar sistem seragam.
+  if (!user.apiKey || user.apiKey.trim() === '') {
+    return <KeyLockScreen user={user} />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex overflow-hidden">

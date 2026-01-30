@@ -69,7 +69,6 @@ const ATPManager: React.FC<ATPManagerProps> = ({ user }) => {
       if (active) setActiveYear(active.data().year);
     });
 
-    // ISOLASI DATA ATP PERSONAL
     const qAtp = query(collection(db, "atp"), where("userId", "==", user.id));
     const unsubATP = onSnapshot(qAtp, (snap) => {
       setAtpData(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ATPItem[]);
@@ -80,7 +79,6 @@ const ATPManager: React.FC<ATPManagerProps> = ({ user }) => {
       setCps(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as CapaianPembelajaran[]);
     });
 
-    // ISOLASI DATA ANALISIS PERSONAL
     const qAnalisis = query(collection(db, "analisis"), where("userId", "==", user.id));
     const unsubAnalisis = onSnapshot(qAnalisis, snap => {
       setAllAnalisis(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as AnalisisCP[]);
@@ -101,6 +99,32 @@ const ATPManager: React.FC<ATPManagerProps> = ({ user }) => {
       .sort((a, b) => (a.indexOrder || 0) - (b.indexOrder || 0));
   }, [atpData, filterFase, filterKelas, filterMapel]);
 
+  const handleAIComplete = async (id: string) => {
+    const item = atpData.find(i => i.id === id);
+    if (!item || !item.tujuanPembelajaran) return;
+    if (!user.apiKey) { alert("API Key tidak valid."); return; }
+
+    setIsProcessingId(id);
+    try {
+      const suggestions = await completeATPDetails(user.apiKey, item.tujuanPembelajaran, item.materi, item.kelas);
+      if (suggestions) {
+        await updateDoc(doc(db, "atp", id), {
+          alurTujuanPembelajaran: suggestions.alurTujuan,
+          alokasiWaktu: suggestions.alokasiWaktu,
+          dimensiProfilLulusan: suggestions.dimensiOfProfil,
+          asesmenAwal: suggestions.asesmenAwal,
+          asesmenProses: suggestions.asesmenProses,
+          asesmenAkhir: suggestions.asesmenAkhir,
+          sumberBelajar: suggestions.sumberBelajar
+        });
+        setMessage({ text: 'Detail ATP dilengkapi AI personal Anda!', type: 'success' });
+        setTimeout(() => setMessage(null), 3000);
+      }
+    } catch (err) {
+      setMessage({ text: 'Gagal memproses AI.', type: 'error' });
+    } finally { setIsProcessingId(null); }
+  };
+
   const handleSyncFromAnalisis = async () => {
     setLoading(true);
     try {
@@ -113,7 +137,7 @@ const ATPManager: React.FC<ATPManagerProps> = ({ user }) => {
         .sort((a, b) => (a.indexOrder || 0) - (b.indexOrder || 0));
 
       if (sourceAnalisis.length === 0) {
-        setMessage({ text: 'Tidak ada data Analisis CP Anda untuk kriteria ini.', type: 'error' });
+        setMessage({ text: 'Tidak ada data Analisis CP Anda.', type: 'error' });
         setLoading(false);
         return;
       }
@@ -123,8 +147,7 @@ const ATPManager: React.FC<ATPManagerProps> = ({ user }) => {
         const alreadyExists = atpData.some(atp => 
           atp.tujuanPembelajaran.trim().toLowerCase() === a.tujuanPembelajaran.trim().toLowerCase() && 
           atp.kelas === filterKelas && 
-          atp.fase === filterFase &&
-          (atp.mataPelajaran || '').trim().toLowerCase() === filterMapel.trim().toLowerCase()
+          atp.fase === filterFase
         );
 
         if (!alreadyExists) {
@@ -154,82 +177,19 @@ const ATPManager: React.FC<ATPManagerProps> = ({ user }) => {
         }
       }
       
-      if (count > 0) {
-        setMessage({ text: `Sinkronisasi Berhasil: ${count} item ditambahkan ke ATP personal.`, type: 'success' });
-      } else {
-        setMessage({ text: 'Seluruh data analisis sudah tersinkron ke ATP Anda.', type: 'info' });
-      }
+      setMessage({ text: `Berhasil sinkron ${count} item ke ATP Anda.`, type: 'success' });
       setTimeout(() => setMessage(null), 3000);
     } catch (err) {
-      console.error(err);
-      setMessage({ text: 'Terjadi kesalahan saat sinkronisasi data.', type: 'error' });
+      setMessage({ text: 'Kesalahan sinkronisasi.', type: 'error' });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAIComplete = async (id: string) => {
-    const item = atpData.find(i => i.id === id);
-    if (!item || !item.tujuanPembelajaran) return;
-    setIsProcessingId(id);
-    try {
-      // FIX: Removed individually passed apiKey
-      const suggestions = await completeATPDetails(item.tujuanPembelajaran, item.materi, item.kelas);
-      if (suggestions) {
-        await updateField(id, 'alurTujuanPembelajaran', suggestions.alurTujuan);
-        await updateField(id, 'alokasiWaktu', suggestions.alokasiWaktu);
-        await updateField(id, 'dimensiProfilLulusan', suggestions.dimensiOfProfil);
-        await updateField(id, 'asesmenAwal', suggestions.asesmenAwal);
-        await updateField(id, 'asesmenProses', suggestions.asesmenProses);
-        await updateField(id, 'asesmenAkhir', suggestions.asesmenAkhir);
-        await updateField(id, 'sumberBelajar', suggestions.sumberBelajar);
-        
-        setMessage({ text: 'Detail ATP dilengkapi AI dan disinkronkan!', type: 'success' });
-        setTimeout(() => setMessage(null), 3000);
-      }
-    } catch (err) {
-      setMessage({ text: 'AI Error: Layanan tidak tersedia.', type: 'error' });
-    } finally { setIsProcessingId(null); }
-  };
-
   const updateField = async (id: string, field: keyof ATPItem, value: any) => {
     try {
-      // 1. Update Dokumen ATP itu sendiri
       await updateDoc(doc(db, "atp", id), { [field]: value });
-
-      // 2. LOGIKA INTEGRASI OTOMATIS (CASCADING UPDATE)
-      const syncFields = ['tujuanPembelajaran', 'materi', 'alokasiWaktu', 'kodeCP'];
-      
-      if (syncFields.includes(field)) {
-        // Cari Dokumen Prota yang tertaut
-        const qProta = query(collection(db, "prota"), where("atpId", "==", id));
-        const snapProta = await getDocs(qProta);
-        snapProta.forEach(async (d) => {
-          let protaField: string = field;
-          if (field === 'materi') protaField = 'materiPokok';
-          if (field === 'alokasiWaktu') protaField = 'jp';
-          await updateDoc(doc(db, "prota", d.id), { [protaField]: value });
-        });
-
-        // Cari Dokumen Promes yang tertaut
-        const qPromes = query(collection(db, "promes"), where("atpId", "==", id));
-        const snapPromes = await getDocs(qPromes);
-        snapPromes.forEach(async (d) => {
-          let promesField: string = field;
-          if (field === 'materi') promesField = 'materiPokok';
-          await updateDoc(doc(db, "promes", d.id), { [promesField]: value });
-        });
-
-        // Update RPM juga jika ada
-        const qRPM = query(collection(db, "rpm"), where("atpId", "==", id));
-        const snapRPM = await getDocs(qRPM);
-        snapRPM.forEach(async (d) => {
-          await updateDoc(doc(db, "rpm", d.id), { [field]: value });
-        });
-      }
-    } catch (e) {
-      console.error("Gagal sinkronisasi data terkait:", e);
-    }
+    } catch (e) { console.error(e); }
   };
 
   const handleDelete = async () => {
@@ -331,11 +291,6 @@ const ATPManager: React.FC<ATPManagerProps> = ({ user }) => {
               )}
             </tbody>
           </table>
-
-          <div className="mt-16 flex justify-between items-start text-[10px] px-12 font-sans uppercase font-black tracking-tighter">
-            <div className="text-center w-72"><p>Mengetahui,</p> <p>Kepala Sekolah</p> <div className="h-24"></div> <p className="border-b border-black inline-block min-w-[200px]">{settings.principalName}</p> <p className="no-underline mt-1 font-normal">NIP. {settings.principalNip}</p></div>
-            <div className="text-center w-72"><p>Bilato, {new Date().toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'})}</p> <p>Guru Kelas/Mapel</p> <div className="h-24"></div> <p className="border-b border-black inline-block min-w-[180px]">{user?.name || '[Nama Guru]'}</p> <p className="no-underline mt-1 font-normal">NIP. {user?.nip || '...................'}</p></div>
-          </div>
         </div>
       </div>
     );
@@ -360,7 +315,7 @@ const ATPManager: React.FC<ATPManagerProps> = ({ user }) => {
             <div className="p-8 text-center">
               <div className="w-16 h-16 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mb-6 mx-auto"><AlertTriangle size={32} /></div>
               <h3 className="text-xl font-black text-slate-900 uppercase mb-2">Hapus ATP</h3>
-              <p className="text-slate-500 font-medium text-sm leading-relaxed">Hapus baris ATP ini dari database Anda? Data yang sudah tersinkron ke Prota/Promes akan tetap ada namun kehilangan tautan sinkronisasi otomatis.</p>
+              <p className="text-slate-500 font-medium text-sm leading-relaxed">Hapus baris ATP ini?</p>
             </div>
             <div className="p-4 bg-slate-50 flex gap-3">
               <button onClick={() => setDeleteConfirmId(null)} className="flex-1 px-6 py-3 rounded-xl text-xs font-black text-slate-500 bg-white border border-slate-200 hover:bg-slate-100 transition-all">BATAL</button>
@@ -376,12 +331,12 @@ const ATPManager: React.FC<ATPManagerProps> = ({ user }) => {
               <div className="p-3 bg-blue-600 text-white rounded-2xl shadow-lg"><ListTree size={24} /></div>
               <div>
                 <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight leading-none">Alur Tujuan Pembelajaran (ATP)</h2>
-                <p className="text-[10px] text-blue-600 font-black uppercase mt-1">Tenant: {user.school}</p>
+                <p className="text-[10px] text-blue-600 font-black uppercase mt-1">Kuota Personal: @{user.username}</p>
               </div>
            </div>
            <div className="flex flex-wrap gap-2">
              <button onClick={handleSyncFromAnalisis} className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-lg">
-                <Copy size={16}/> AMBIL DATA ANALISIS CP (PERSONAL)
+                <Copy size={16}/> AMBIL DATA ANALISIS CP
              </button>
              <button onClick={() => setIsPrintMode(true)} className="bg-slate-800 text-white px-5 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 hover:bg-black shadow-lg transition-all shadow-lg">
                 <Printer size={16}/> PRATINJAU
@@ -425,15 +380,11 @@ const ATPManager: React.FC<ATPManagerProps> = ({ user }) => {
               {loading ? (
                 <tr><td colSpan={9} className="py-20 text-center"><Loader2 className="animate-spin inline-block text-blue-600" /></td></tr>
               ) : filteredAtp.length === 0 ? (
-                <tr><td colSpan={9} className="px-6 py-24 text-center text-slate-400 italic font-bold uppercase text-xs">Data ATP kosong untuk filter ini. Klik "Ambil Data Analisis" untuk memulai data personal Anda.</td></tr>
+                <tr><td colSpan={9} className="px-6 py-24 text-center text-slate-400 italic font-bold uppercase text-xs">Data ATP kosong.</td></tr>
               ) : (
                 filteredAtp.map((item, idx) => (
                   <tr key={item.id} className="align-top group hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-6 text-center font-black text-slate-300">
-                      <div className="flex flex-col gap-1">
-                        <span>{idx + 1}</span>
-                      </div>
-                    </td>
+                    <td className="px-6 py-6 text-center font-black text-slate-300">{idx + 1}</td>
                     <td className="px-6 py-6 border-r border-slate-50 text-center">
                        <span className="inline-block px-3 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-[10px] font-black border border-indigo-100 uppercase">
                          {item.kodeCP || '-'}
@@ -456,7 +407,7 @@ const ATPManager: React.FC<ATPManagerProps> = ({ user }) => {
                           className="w-full bg-slate-900 text-white border-none rounded-lg p-2 text-center text-xs font-black" 
                           value={item.alokasiWaktu} 
                           onChange={e => updateField(item.id, 'alokasiWaktu', e.target.value)} 
-                          placeholder="Contoh: 4 JP" 
+                          placeholder="4 JP" 
                         />
                       </div>
                     </td>
@@ -465,7 +416,6 @@ const ATPManager: React.FC<ATPManagerProps> = ({ user }) => {
                           className="w-full bg-transparent border-none focus:ring-0 text-[10px] font-black text-indigo-700 leading-relaxed resize-none p-0 h-32 italic" 
                           value={item.dimensiProfilLulusan} 
                           onChange={e => updateField(item.id, 'dimensiProfilLulusan', e.target.value)}
-                          placeholder="8 Dimensi Profil Lulusan..." 
                        />
                     </td>
                     <td className="px-6 py-6 border-r border-slate-50 space-y-2">
@@ -475,7 +425,7 @@ const ATPManager: React.FC<ATPManagerProps> = ({ user }) => {
                     </td>
                     <td className="px-6 py-6 text-center">
                       <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button title="Lengkapi dengan AI" onClick={() => handleAIComplete(item.id)} disabled={isProcessingId === item.id} className="bg-indigo-600 text-white p-3 rounded-xl hover:bg-indigo-700 shadow-lg disabled:opacity-50">
+                        <button title="AI Personal Suggestion" onClick={() => handleAIComplete(item.id)} disabled={isProcessingId === item.id} className="bg-indigo-600 text-white p-3 rounded-xl hover:bg-indigo-700 shadow-lg disabled:opacity-50">
                           {isProcessingId === item.id ? <Loader2 size={18} className="animate-spin" /> : <Wand2 size={18} />}
                         </button>
                         <button title="Hapus" onClick={() => setDeleteConfirmId(item.id)} className="bg-red-50 text-red-600 p-3 rounded-xl hover:bg-red-600 hover:text-white transition-all">

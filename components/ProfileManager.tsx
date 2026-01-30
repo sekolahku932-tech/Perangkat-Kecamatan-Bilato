@@ -14,9 +14,11 @@ interface ProfileManagerProps {
 const ProfileManager: React.FC<ProfileManagerProps> = ({ user }) => {
   const [formData, setFormData] = useState({
     name: user.name || '',
-    nip: user.nip || ''
+    nip: user.nip || '',
+    apiKey: user.apiKey || ''
   });
   const [isSaving, setIsSaving] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   const handleSave = async (e: React.FormEvent) => {
@@ -27,9 +29,10 @@ const ProfileManager: React.FC<ProfileManagerProps> = ({ user }) => {
     try {
       await updateDoc(doc(db, "users", user.id), {
         name: formData.name.toUpperCase(),
-        nip: formData.nip
+        nip: formData.nip,
+        apiKey: formData.apiKey.trim()
       });
-      setMessage({ text: 'Profil Berhasil Diperbarui!', type: 'success' });
+      setMessage({ text: 'Profil & Kunci Akses Berhasil Diperbarui!', type: 'success' });
     } catch (error: any) {
       console.error(error);
       setMessage({ text: 'Gagal memperbarui profil: ' + error.message, type: 'error' });
@@ -83,6 +86,28 @@ const ProfileManager: React.FC<ProfileManagerProps> = ({ user }) => {
                   placeholder="-"
                 />
               </div>
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1 tracking-widest flex items-center gap-2">
+                  <Key size={12} /> Kunci Akses Personal (API Key)
+                </label>
+                <div className="relative">
+                  <input 
+                    type={showApiKey ? "text" : "password"} 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-3xl py-4 pl-6 pr-14 text-xs font-mono focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                    value={formData.apiKey}
+                    onChange={e => setFormData({...formData, apiKey: e.target.value})}
+                    placeholder="Masukkan Gemini API Key Anda..."
+                  />
+                  <button 
+                    type="button"
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 transition-colors"
+                  >
+                    {showApiKey ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
+                </div>
+                <p className="mt-2 text-[9px] text-slate-400 italic px-2">Kunci ini digunakan untuk memproses modul AI menggunakan kuota personal Anda.</p>
+              </div>
             </div>
 
             <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white relative overflow-hidden flex flex-col justify-center">
@@ -95,7 +120,7 @@ const ProfileManager: React.FC<ProfileManagerProps> = ({ user }) => {
                   <h3 className="text-xs font-black uppercase tracking-widest">Smart Assistant</h3>
                 </div>
                 <p className="text-[11px] text-slate-400 leading-relaxed font-medium uppercase tracking-tight">
-                  Akun Anda terhubung dengan sistem AI District Unified. Semua data perangkat tersimpan secara aman di cloud.
+                  Kunci akses (API Key) Anda terenkripsi secara visual. Gunakan kunci Gemini API dari Google AI Studio untuk mengaktifkan fitur asisten.
                 </p>
               </div>
             </div>

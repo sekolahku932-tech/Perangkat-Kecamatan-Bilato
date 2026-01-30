@@ -57,9 +57,9 @@ const SCHOOL_CONFIGS: Record<string, any> = {
     projectId: "sdn4-bilato",
   },
   'SD NEGERI 5 BILATO': {
-    apiKey: "PASTE_API_KEY_SDN5_DISINI",
-    authDomain: "sdn5-bilato.firebaseapp.com",
-    projectId: "sdn5-bilato",
+    apiKey: "AIzaSyBvH3mqRH1iXL3kNXkq-ZgLN9uB9cNiHSc",
+    authDomain: "perangkat-17420.firebaseapp.com",
+    projectId: "perangkat-17420",
   },
   'SD NEGERI 6 BILATO': {
     apiKey: "AIzaSyC1HNCeIxEeXIa_M7mthqBFmrxFltN1fnQ",

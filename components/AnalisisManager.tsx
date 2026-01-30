@@ -74,7 +74,6 @@ const AnalisisManager: React.FC<AnalisisManagerProps> = ({ user }) => {
       setCps(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as CapaianPembelajaran[]);
     });
 
-    // ISOLASI: Filter berdasarkan userId
     const qAnalisis = query(collection(db, "analisis"), where("userId", "==", user.id));
     const unsubAnalisis = onSnapshot(qAnalisis, snap => {
       setAnalisis(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as AnalisisCP[]);
@@ -98,10 +97,13 @@ const AnalisisManager: React.FC<AnalisisManagerProps> = ({ user }) => {
   }, [cps, filterFase, filterMapel]);
 
   const handleAnalyze = async (cp: CapaianPembelajaran) => {
+    if (!user.apiKey) {
+      alert("Kunci AI Anda hilang. Silakan refresh halaman atau login kembali.");
+      return;
+    }
     setIsAnalyzing(true);
     try {
-      // FIX: Removed individually passed apiKey
-      const results = await analyzeCPToTP(cp.deskripsi, cp.elemen, cp.fase, filterKelas);
+      const results = await analyzeCPToTP(user.apiKey, cp.deskripsi, cp.elemen, cp.fase, filterKelas);
       if (results && Array.isArray(results)) {
         let lastOrder = filteredAnalisis.length > 0 ? Math.max(...filteredAnalisis.map(a => a.indexOrder || 0)) : 0;
         for (const res of results) {
@@ -109,24 +111,24 @@ const AnalisisManager: React.FC<AnalisisManagerProps> = ({ user }) => {
           await addDoc(collection(db, "analisis"), {
             userId: user.id,
             cpId: cp.id,
-            kodeCP: cp.kode, // MENYIMPAN KODE CP
+            kodeCP: cp.kode, 
             fase: filterFase,
             kelas: filterKelas,
             mataPelajaran: filterMapel,
             materi: res.materi,
             subMateri: res.subMateri || '',
             tujuanPembelajaran: res.tp,
-            profilLulusan: res.profilLulusan || '', // AI-driven DPL analysis
+            profilLulusan: res.profilLulusan || '', 
             indexOrder: lastOrder,
             school: user.school
           });
         }
-        setMessage({ text: 'Analisis AI Berhasil: TP Dirinci & Kode CP Disinkron!', type: 'success' });
+        setMessage({ text: 'Analisis Berhasil menggunakan Kuota Gemini Personal!', type: 'success' });
         setTimeout(() => setMessage(null), 3000);
       }
     } catch (error: any) {
       console.error(error);
-      setMessage({ text: 'AI Error: Layanan tidak tersedia.', type: 'error' });
+      setMessage({ text: 'AI Error: Gagal memproses permintaan.', type: 'error' });
     } finally {
       setIsAnalyzing(false);
     }
@@ -242,7 +244,7 @@ const AnalisisManager: React.FC<AnalisisManagerProps> = ({ user }) => {
             <div className="p-3 bg-emerald-600 text-white rounded-2xl shadow-lg"><BrainCircuit size={24} /></div>
             <div>
               <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight leading-none">ANALISIS CP-TP CERDAS</h2>
-              <p className="text-[10px] text-emerald-600 font-black uppercase mt-1">Tenant Database: {user.school}</p>
+              <p className="text-[10px] text-emerald-600 font-black uppercase mt-1">Sistem Kuota Personal: @{user.username}</p>
             </div>
           </div>
           <button onClick={() => setIsPrintMode(true)} className="bg-slate-800 text-white px-6 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 hover:bg-black shadow-lg transition-all"><Eye size={18} /> PRATINJAU</button>

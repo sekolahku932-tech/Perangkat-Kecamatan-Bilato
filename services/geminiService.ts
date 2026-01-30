@@ -30,25 +30,27 @@ const cleanAndParseJson = (str: any): any => {
   }
 };
 
-// FIX: Modified to obtain API key exclusively from process.env.API_KEY
-const getAiClient = () => {
-  return new GoogleGenAI({ apiKey: process.env.API_KEY });
+const getAiClient = (apiKey: string) => {
+  if (!apiKey) throw new Error("API Key tidak ditemukan. Silakan hubungkan kembali kunci AI Anda.");
+  return new GoogleGenAI({ apiKey });
 };
 
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
 const COMPLEX_MODEL = 'gemini-3-pro-preview'; 
 const IMAGE_MODEL = 'gemini-2.5-flash-image';
 
-export const startAIChat = async (systemInstruction: string) => {
-  const ai = getAiClient();
+const DPL_LIST = "Keimanan dan Ketakwaan terhadap Tuhan YME, Kewargaan, Penalaran Kritis, Kreativitas, Kolaborasi, Kemandirian, Kesehatan, Komunikasi";
+
+export const startAIChat = async (apiKey: string, systemInstruction: string) => {
+  const ai = getAiClient(apiKey);
   return ai.chats.create({
     model: DEFAULT_MODEL,
     config: { systemInstruction, temperature: 0.7 },
   });
 };
 
-export const analyzeDocuments = async (files: UploadedFile[], prompt: string) => {
-  const ai = getAiClient();
+export const analyzeDocuments = async (apiKey: string, files: UploadedFile[], prompt: string) => {
+  const ai = getAiClient(apiKey);
   const fileParts = files.map(file => ({
     inlineData: { data: file.base64.split(',')[1], mimeType: file.type }
   }));
@@ -60,9 +62,14 @@ export const analyzeDocuments = async (files: UploadedFile[], prompt: string) =>
   return response.text || "AI tidak merespon.";
 };
 
-export const analyzeCPToTP = async (cpContent: string, elemen: string, fase: string, kelas: string) => {
-  const ai = getAiClient();
-  const prompt = `Analisis Capaian Pembelajaran (CP) untuk Kelas ${kelas} SD. CP: "${cpContent}" Elemen: "${elemen}"`;
+export const analyzeCPToTP = async (apiKey: string, cpContent: string, elemen: string, fase: string, kelas: string) => {
+  const ai = getAiClient(apiKey);
+  const prompt = `Analisis Capaian Pembelajaran (CP) untuk Kelas ${kelas} SD. 
+  CP: "${cpContent}" 
+  Elemen: "${elemen}"
+  
+  TUGAS: Pecah menjadi TP (Tujuan Pembelajaran) dan tentukan Dimensi Profil Lulusan (DPL) yang relevan.
+  WAJIB GUNAKAN DPL DARI DAFTAR INI SAJA: ${DPL_LIST}.`;
 
   const response = await ai.models.generateContent({
     model: COMPLEX_MODEL,
@@ -76,7 +83,7 @@ export const analyzeCPToTP = async (cpContent: string, elemen: string, fase: str
             materi: { type: Type.STRING },
             subMateri: { type: Type.STRING },
             tp: { type: Type.STRING },
-            profilLulusan: { type: Type.STRING }
+            profilLulusan: { type: Type.STRING, description: `Pilih dari: ${DPL_LIST}` }
           },
           required: ['materi', 'subMateri', 'tp', 'profilLulusan'],
           propertyOrdering: ['materi', 'subMateri', 'tp', 'profilLulusan']
@@ -88,9 +95,13 @@ export const analyzeCPToTP = async (cpContent: string, elemen: string, fase: str
   return cleanAndParseJson(response.text);
 };
 
-export const completeATPDetails = async (tp: string, materi: string, kelas: string) => {
-  const ai = getAiClient();
-  const prompt = `Lengkapi rincian ATP SD Kelas ${kelas}. TP: "${tp}" Materi: "${materi}"`;
+export const completeATPDetails = async (apiKey: string, tp: string, materi: string, kelas: string) => {
+  const ai = getAiClient(apiKey);
+  const prompt = `Lengkapi rincian ATP SD Kelas ${kelas}. 
+  TP: "${tp}" 
+  Materi: "${materi}"
+  
+  Pada bagian dimensiOfProfil, pilih Dimensi Profil Lulusan (DPL) yang paling sesuai dari daftar: ${DPL_LIST}.`;
 
   const response = await ai.models.generateContent({
     model: DEFAULT_MODEL,
@@ -101,7 +112,7 @@ export const completeATPDetails = async (tp: string, materi: string, kelas: stri
         properties: {
           alurTujuan: { type: Type.STRING },
           alokasiWaktu: { type: Type.STRING },
-          dimensiOfProfil: { type: Type.STRING },
+          dimensiOfProfil: { type: Type.STRING, description: `Gunakan daftar DPL: ${DPL_LIST}` },
           asesmenAwal: { type: Type.STRING },
           asesmenProses: { type: Type.STRING },
           asesmenAkhir: { type: Type.STRING },
@@ -115,8 +126,8 @@ export const completeATPDetails = async (tp: string, materi: string, kelas: stri
   return cleanAndParseJson(response.text);
 };
 
-export const recommendPedagogy = async (tp: string, alurAtp: string, materi: string, kelas: string) => {
-  const ai = getAiClient();
+export const recommendPedagogy = async (apiKey: string, tp: string, alurAtp: string, materi: string, kelas: string) => {
+  const ai = getAiClient(apiKey);
   const response = await ai.models.generateContent({
     model: DEFAULT_MODEL,
     config: {
@@ -132,8 +143,8 @@ export const recommendPedagogy = async (tp: string, alurAtp: string, materi: str
   return cleanAndParseJson(response.text);
 };
 
-export const generateRPMContent = async (tp: string, materi: string, kelas: string, praktikPedagogis: string, alokasiWaktu: string, jumlahPertemuan: number = 1) => {
-  const ai = getAiClient();
+export const generateRPMContent = async (apiKey: string, tp: string, materi: string, kelas: string, praktikPedagogis: string, alokasiWaktu: string, jumlahPertemuan: number = 1) => {
+  const ai = getAiClient(apiKey);
   const prompt = `Susun RPM mendalam untuk ${jumlahPertemuan} pertemuan. 
   TP: "${tp}" 
   Materi: "${materi}" 
@@ -169,8 +180,8 @@ export const generateRPMContent = async (tp: string, materi: string, kelas: stri
   return cleanAndParseJson(response.text);
 };
 
-export const generateJournalNarrative = async (kelas: string, mapel: string, materi: string, refRpm?: any) => {
-  const ai = getAiClient();
+export const generateJournalNarrative = async (apiKey: string, kelas: string, mapel: string, materi: string, refRpm?: any) => {
+  const ai = getAiClient(apiKey);
   const contextPrompt = `Tulis narasi log jurnal harian mengajar Kelas ${kelas}, Mapel ${mapel}, Materi ${materi}.`;
   
   const response = await ai.models.generateContent({
@@ -191,8 +202,8 @@ export const generateJournalNarrative = async (kelas: string, mapel: string, mat
   return cleanAndParseJson(response.text);
 };
 
-export const generateAssessmentDetails = async (tp: string, materi: string, kelas: string, stepsContext: string) => {
-  const ai = getAiClient();
+export const generateAssessmentDetails = async (apiKey: string, tp: string, materi: string, kelas: string, stepsContext: string) => {
+  const ai = getAiClient(apiKey);
   const prompt = `Berdasarkan Konteks Langkah Pembelajaran berikut: "${stepsContext}", susunlah instrumen asesmen yang sinkron untuk TP: "${tp}".
   
   ATURAN WAJIB:
@@ -239,8 +250,8 @@ export const generateAssessmentDetails = async (tp: string, materi: string, kela
   return cleanAndParseJson(response.text);
 };
 
-export const generateLKPDContent = async (rpm: any) => {
-  const ai = getAiClient();
+export const generateLKPDContent = async (apiKey: string, rpm: any) => {
+  const ai = getAiClient(apiKey);
   const prompt = `Susun LKPD sinkron RPM. 
   TP: "${rpm.tujuanPembelajaran}" 
   MATERI: "${rpm.materi}"
@@ -269,8 +280,8 @@ export const generateLKPDContent = async (rpm: any) => {
   return cleanAndParseJson(response.text);
 };
 
-export const generateIndikatorSoal = async (item: any) => {
-  const ai = getAiClient();
+export const generateIndikatorSoal = async (apiKey: string, item: any) => {
+  const ai = getAiClient(apiKey);
   const prompt = `Buat 1 baris indikator soal AKM Kelas ${item.kelas} TP: "${item.tujuanPembelajaran}".`;
 
   const response = await ai.models.generateContent({
@@ -280,8 +291,8 @@ export const generateIndikatorSoal = async (item: any) => {
   return response.text || "";
 };
 
-export const generateButirSoal = async (item: any) => {
-  const ai = getAiClient();
+export const generateButirSoal = async (apiKey: string, item: any) => {
+  const ai = getAiClient(apiKey);
   const prompt = `Susun butir soal Kelas ${item.kelas}. Indikator: "${item.indikatorSoal}". Bentuk: ${item.bentukSoal}`;
 
   const response = await ai.models.generateContent({
@@ -303,8 +314,8 @@ export const generateButirSoal = async (item: any) => {
   return cleanAndParseJson(response.text);
 };
 
-export const generateAiImage = async (context: string, kelas: Kelas) => {
-  const ai = getAiClient();
+export const generateAiImage = async (apiKey: string, context: string, kelas: string) => {
+  const ai = getAiClient(apiKey);
   try {
     const response = await ai.models.generateContent({
       model: IMAGE_MODEL,
