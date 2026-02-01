@@ -1,3 +1,4 @@
+
 // @google/genai is not used directly here, but it's part of the global project context.
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { HariEfektif, SchoolSettings, AcademicYear, MATA_PELAJARAN, SEMUA_AKTIVITAS, EventKalender, JadwalItem, Kelas, User } from '../types';
@@ -75,7 +76,7 @@ const HariEfektifManager: React.FC<HariEfektifManagerProps> = ({ user }) => {
     const unsubSettings = onSnapshot(doc(db, "school_settings", user.school), (snap) => {
       if (snap.exists()) setSettings(snap.data() as SchoolSettings);
     });
-    const unsubYears = onSnapshot(collection(db, "academic_years"), (snap) => {
+    const unsubYears = onSnapshot(query(collection(db, "academic_years"), where("school", "==", user.school)), (snap) => {
       const active = snap.docs.find((d: any) => d.data().isActive);
       if (active) setActiveYear(active.data().year);
     });
@@ -117,23 +118,21 @@ const HariEfektifManager: React.FC<HariEfektifManagerProps> = ({ user }) => {
   // Analisis Jam Mengajar Berdasarkan Kalender & Jadwal
   const analisisJamEfektif = useMemo(() => {
     const yearParts = activeYear.split('/');
+    if (yearParts.length < 2) return [];
     const yearStart = parseInt(yearParts[0]);
     const yearEnd = parseInt(yearParts[1]) || yearStart + 1;
     const bulanList = semester === 1 ? BULAN_SEM_1 : BULAN_SEM_2;
     
-    // 1. Get schedule for this mapel & class
     const subjectSchedule = jadwal.filter(j => j.kelas === selectedKelas && j.mapel === mapel);
     const teachingDayMap: Record<string, number> = {};
     subjectSchedule.forEach(s => {
       teachingDayMap[s.hari] = (teachingDayMap[s.hari] || 0) + 1;
     });
 
-    // 2. Loop through months and dates
     const monthlyBreakdown: { bulan: string; sessions: number; totalJP: number; dates: string[] }[] = [];
     
     bulanList.forEach(bulan => {
       const monthIndex = MONTH_MAP[bulan];
-      // Jika bulan >= Juli (index 6), gunakan yearStart, jika Januari-Juni (index 0-5), gunakan yearEnd
       const year = monthIndex >= 6 ? yearStart : yearEnd;
       let monthSessions = 0;
       let monthJP = 0;
@@ -145,7 +144,6 @@ const HariEfektifManager: React.FC<HariEfektifManagerProps> = ({ user }) => {
         const dateStr = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         
         const hasTeaching = teachingDayMap[dayName];
-        // FIX: Periksa semua tipe event (libur, ujian, kegiatan, penting) untuk memblokir jam efektif
         const isBlocked = events.some(e => e.date === dateStr);
 
         if (hasTeaching && !isBlocked) {
@@ -181,6 +179,11 @@ const HariEfektifManager: React.FC<HariEfektifManagerProps> = ({ user }) => {
   };
 
   const handleSyncFromCalendar = async () => {
+    if (activeYear === '..../....') {
+      setNotification({ text: 'Harap tentukan Tahun Pelajaran di menu Pengaturan!', type: 'error' });
+      return;
+    }
+
     setIsSyncing(true);
     const yearParts = activeYear.split('/');
     const yearStart = parseInt(yearParts[0]);
@@ -192,38 +195,38 @@ const HariEfektifManager: React.FC<HariEfektifManagerProps> = ({ user }) => {
         const monthIndex = MONTH_MAP[bulan];
         const year = monthIndex >= 6 ? yearStart : yearEnd;
         
-        let mondayCount = 0;
-        const d = new Date(year, monthIndex, 1);
-        while (d.getMonth() === monthIndex) {
-          if (d.getDay() === 1) mondayCount++;
-          d.setDate(d.getDate() + 1);
-        }
+        const firstDayOfMonth = new Date(year, monthIndex, 1);
+        const lastDayOfMonth = new Date(year, monthIndex + 1, 0);
+        
+        // Menghitung jumlah baris kalender (minggu)
+        const totalDays = lastDayOfMonth.getDate();
+        const startDay = firstDayOfMonth.getDay(); // 0 = Minggu
+        const rowCount = Math.ceil((totalDays + startDay) / 7);
 
-        let nonEffectiveWeeks = 0;
-        let keteranganLibur = [];
-        const startOfMonth = new Date(year, monthIndex, 1);
+        let keteranganLibur: string[] = [];
         const weekHolidays = new Set<number>();
+        
         const monthEvents = events.filter(e => {
-          const eDate = new Date(e.date);
-          return eDate.getMonth() === monthIndex && eDate.getFullYear() === year && e.type === 'libur';
+          const dateParts = e.date.split('-');
+          if (dateParts.length !== 3) return false;
+          const eYear = parseInt(dateParts[0]);
+          const eMonth = parseInt(dateParts[1]) - 1;
+          return eYear === year && eMonth === monthIndex && e.type === 'libur';
         });
 
         monthEvents.forEach(e => {
-          const eDate = new Date(e.date);
-          const weekNum = Math.ceil((eDate.getDate() + startOfMonth.getDay()) / 7);
+          const day = parseInt(e.date.split('-')[2]);
+          const weekNum = Math.ceil((day + startDay) / 7);
           weekHolidays.add(weekNum);
           keteranganLibur.push(e.title);
         });
 
-        nonEffectiveWeeks = weekHolidays.size;
-        const uniqueKeterangan = Array.from(new Set(keteranganLibur)).join(', ');
-
         const existing = data.find(d => d.kelas === selectedKelas && d.semester === semester && d.bulan === bulan);
         const payload = {
           kelas: selectedKelas, semester, bulan, school: user.school,
-          jumlahMinggu: mondayCount || 4,
-          mingguTidakEfektif: nonEffectiveWeeks,
-          keterangan: uniqueKeterangan || ''
+          jumlahMinggu: rowCount,
+          mingguTidakEfektif: weekHolidays.size,
+          keterangan: Array.from(new Set(keteranganLibur)).join(', ') || ''
         };
 
         if (existing) {
@@ -237,6 +240,7 @@ const HariEfektifManager: React.FC<HariEfektifManagerProps> = ({ user }) => {
       setNotification({ text: 'Gagal sinkronisasi data', type: 'error' });
     } finally {
       setIsSyncing(false);
+      setTimeout(() => setNotification(null), 3000);
     }
   };
 
@@ -252,6 +256,7 @@ const HariEfektifManager: React.FC<HariEfektifManagerProps> = ({ user }) => {
         setNotification({ text: 'Event berhasil ditambahkan', type: 'success' });
       }
       setNewEvent({ type: 'libur', title: '', date: '' });
+      setTimeout(() => setNotification(null), 3000);
     } catch (e) { console.error(e); }
   };
 
@@ -274,6 +279,7 @@ const HariEfektifManager: React.FC<HariEfektifManagerProps> = ({ user }) => {
       await deleteDoc(doc(db, "kalender_events", id));
       setNotification({ text: 'Event dihapus', type: 'info' });
       if (editingEventId === id) handleCancelEdit();
+      setTimeout(() => setNotification(null), 3000);
     } catch (e) { console.error(e); }
   };
 
@@ -367,8 +373,7 @@ const HariEfektifManager: React.FC<HariEfektifManagerProps> = ({ user }) => {
     for (let i = 0; i < (firstDay === 0 ? 0 : firstDay); i++) days.push(<div key={`p-${i}`} className={`border border-slate-100 ${isPrint ? 'h-20 bg-slate-50' : 'h-24 bg-slate-50/30'}`}></div>);
     
     for (let d = 1; d <= daysInMonth; d++) {
-      const date = new Date(year, month, d);
-      const dayOfWeek = date.getDay();
+      const dayOfWeek = (firstDay + d - 1) % 7;
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const dayEvents = events.filter(e => e.date === dateStr);
       const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
@@ -601,8 +606,8 @@ const HariEfektifManager: React.FC<HariEfektifManagerProps> = ({ user }) => {
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
       {notification && (
-        <div className={`fixed top-24 right-8 z-[100] flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl border ${notification.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-blue-50 border-blue-200 text-blue-800'}`}>
-          {notification.type === 'success' ? <CheckCircle2 size={20}/> : <Cloud size={20}/>}
+        <div className={`fixed top-24 right-8 z-[100] flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl border ${notification.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+          <CheckCircle2 size={20}/>
           <span className="text-sm font-black uppercase tracking-tight">{notification.text}</span>
         </div>
       )}

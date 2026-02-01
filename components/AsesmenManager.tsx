@@ -3,7 +3,7 @@ import { Fase, Kelas, Siswa, AsesmenNilai, AsesmenInstrumen, ATPItem, MATA_PELAJ
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Plus, Trash2, Loader2, Cloud, Printer, CheckCircle2, AlertTriangle, 
-  PenTool, BarChart3, Wand2, ChevronRight, FileDown, Sparkles, Lock, Eye, EyeOff, AlertCircle, X, BookText, Square, CheckSquare, Circle, Image as ImageIcon, Download, ArrowLeft, Key
+  PenTool, BarChart3, Wand2, ChevronRight, FileDown, Sparkles, Lock, Eye, EyeOff, AlertCircle, X, BookText, Square, CheckSquare, Circle, ImageIcon, Download, ArrowLeft, Key
 } from 'lucide-react';
 import { db, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where } from '../services/firebase';
 import { generateIndikatorSoal, generateButirSoal, generateAiImage } from '../services/geminiService';
@@ -50,31 +50,31 @@ const AsesmenManager: React.FC<AsesmenManagerProps> = ({ type, user }) => {
     return () => { unsubKisi(); unsubAtp(); };
   }, [user.id]);
 
+  // FIX: Removed apiKey parameter from AI calls as per guidelines
   const generateIndikatorAI = async (item: KisiKisiItem) => {
-    if (!user.apiKey) { alert("API Key Personal tidak terhubung."); return; }
     if (!item.tujuanPembelajaran) return;
     setAiLoadingMap(prev => ({ ...prev, [`ind-${item.id}`]: true }));
     try {
-      const indikator = await generateIndikatorSoal(user.apiKey, item);
+      const indikator = await generateIndikatorSoal(item);
       if (indikator) await updateDoc(doc(db, "kisikisi", item.id), { indikatorSoal: indikator });
     } catch (e: any) { setMessage({ text: "AI Gagal Memproses.", type: "error" }); } finally { 
       setAiLoadingMap(prev => ({ ...prev, [`ind-${item.id}`]: false })); 
     }
   };
 
+  // FIX: Removed apiKey parameter from AI calls as per guidelines
   const generateSoalAI = async (item: KisiKisiItem) => {
-    if (!user.apiKey) { alert("Kuota AI Personal memerlukan API Key."); return; }
     if (!item.indikatorSoal) return;
     setAiLoadingMap(prev => ({ ...prev, [`soal-${item.id}`]: true }));
     try {
-      const result = await generateButirSoal(user.apiKey, item);
+      const result = await generateButirSoal(item);
       if (result) {
         await updateDoc(doc(db, "kisikisi", item.id), { 
           stimulus: result.stimulus || "",
           soal: result.soal || "", 
           kunciJawaban: result.kunci || "" 
         });
-        setMessage({ text: "Soal disusun menggunakan Kuota Anda!", type: "success" });
+        setMessage({ text: "Soal disusun menggunakan sistem AI!", type: "success" });
         setTimeout(() => setMessage(null), 3000);
       }
     } catch (e: any) { setMessage({ text: "AI Gagal.", type: "error" }); } finally { 
@@ -82,12 +82,12 @@ const AsesmenManager: React.FC<AsesmenManagerProps> = ({ type, user }) => {
     }
   };
 
+  // FIX: Removed apiKey parameter from AI calls as per guidelines
   const triggerImageAI = async (item: KisiKisiItem) => {
-     if (!user.apiKey) return;
      setAiLoadingMap(prev => ({ ...prev, [`img-${item.id}`]: true }));
      try {
         const context = item.stimulus || item.indikatorSoal;
-        const base64 = await generateAiImage(user.apiKey, context, kelas);
+        const base64 = await generateAiImage(context, kelas);
         if (base64) await updateDoc(doc(db, "kisikisi", item.id), { stimulusImage: base64 });
      } catch (e) { console.error(e); } finally {
         setAiLoadingMap(prev => ({ ...prev, [`img-${item.id}`]: false }));
@@ -123,7 +123,7 @@ const AsesmenManager: React.FC<AsesmenManagerProps> = ({ type, user }) => {
       <div className="bg-white rounded-3xl shadow-xl overflow-hidden min-h-[400px]">
         <table className="w-full text-left border-collapse min-w-[1200px]">
            <thead className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest h-12">
-              <tr><th className="px-6 py-2 w-16">No</th><th>Elemen & TP</th><th className="w-64">Indikator AI</th><th className="w-96">Konten Soal (Kuota Anda)</th><th className="w-16">Aksi</th></tr>
+              <tr><th className="px-6 py-2 w-16">No</th><th>Elemen & TP</th><th className="w-64">Indikator AI</th><th className="w-96">Konten Soal</th><th className="w-16">Aksi</th></tr>
            </thead>
            <tbody className="divide-y">
               {filteredKisikisi.map((item, idx) => (

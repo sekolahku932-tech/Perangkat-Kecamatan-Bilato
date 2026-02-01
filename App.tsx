@@ -25,7 +25,6 @@ import AsesmenManager from './components/AsesmenManager';
 import AIAssistant from './components/AIAssistant';
 import LoginPage from './components/LoginPage';
 import SchoolSelectionPage from './components/SchoolSelectionPage';
-import KeyLockScreen from './components/KeyLockScreen'; // IMPORT KOMPONEN BARU
 import { User } from './types';
 import { auth, db, onAuthStateChanged, signOut, doc, onSnapshot, getFirebaseInstance } from './services/firebase';
 
@@ -130,12 +129,7 @@ const App: React.FC = () => {
     />
   );
 
-  // LOGIC GATE: Jika API Key belum diisi, tampilkan KeyLockScreen
-  // Pengecualian: Admin tetap bisa masuk tanpa API Key untuk mengelola user jika perlu, 
-  // namun di sini kita terapkan ke SEMUA user (termasuk admin) agar sistem seragam.
-  if (!user.apiKey || user.apiKey.trim() === '') {
-    return <KeyLockScreen user={user} />;
-  }
+  // FIX: API Key is now handled via process.env.API_KEY as per coding guidelines, removed KeyLockScreen requirement
 
   return (
     <div className="min-h-screen bg-slate-50 flex overflow-hidden">

@@ -20,13 +20,9 @@ const DocumentManager: React.FC<DocumentManagerProps> = ({ user }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // FIX: Removed apiKey check and parameter as per guidelines
   const handleSendMessage = async () => {
     if (!input.trim() || isAnalyzing) return;
-    if (!user.apiKey) {
-      const errorMsg: ChatMessage = { role: 'model', content: "Akses AI Terkunci. Masukkan API Key Anda di profil.", timestamp: new Date() };
-      setChatHistory(prev => [...prev, errorMsg]);
-      return;
-    }
 
     const userMsg: ChatMessage = { role: 'user', content: input, timestamp: new Date() };
     setChatHistory(prev => [...prev, userMsg]);
@@ -35,11 +31,11 @@ const DocumentManager: React.FC<DocumentManagerProps> = ({ user }) => {
     setIsAnalyzing(true);
 
     try {
-      const response = await analyzeDocuments(user.apiKey, files, currentInput);
+      const response = await analyzeDocuments(files, currentInput);
       const aiMsg: ChatMessage = { role: 'model', content: response, timestamp: new Date() };
       setChatHistory(prev => [...prev, aiMsg]);
     } catch (error: any) {
-      const errorMsg: ChatMessage = { role: 'model', content: "Gagal memproses AI menggunakan kuota Anda.", timestamp: new Date() };
+      const errorMsg: ChatMessage = { role: 'model', content: "Gagal memproses AI menggunakan sistem cloud.", timestamp: new Date() };
       setChatHistory(prev => [...prev, errorMsg]);
     } finally {
       setIsAnalyzing(false);
@@ -74,7 +70,7 @@ const DocumentManager: React.FC<DocumentManagerProps> = ({ user }) => {
       </div>
       <div className="lg:col-span-3">
         <div className="bg-white rounded-[48px] border overflow-hidden flex flex-col h-[650px]">
-           <div className="p-6 bg-slate-50 border-b font-black uppercase text-xs">Asisten Dokumen (Kuota Personal @{user.username})</div>
+           <div className="p-6 bg-slate-50 border-b font-black uppercase text-xs">Asisten Dokumen (Sistem Cloud Aktif)</div>
            <div className="flex-1 overflow-y-auto p-8 space-y-6 no-scrollbar">
               {chatHistory.map((msg, i) => (<div key={i} className={`flex ${msg.role==='user'?'justify-end':'justify-start'}`}><div className={`p-5 rounded-3xl text-sm leading-relaxed ${msg.role==='user'?'bg-indigo-600 text-white':'bg-slate-50 border'}`}>{msg.content}</div></div>))}
               <div ref={chatEndRef} />

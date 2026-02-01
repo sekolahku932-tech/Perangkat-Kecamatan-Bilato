@@ -99,14 +99,14 @@ const ATPManager: React.FC<ATPManagerProps> = ({ user }) => {
       .sort((a, b) => (a.indexOrder || 0) - (b.indexOrder || 0));
   }, [atpData, filterFase, filterKelas, filterMapel]);
 
+  // FIX: Removed apiKey parameter from AI call as per guidelines
   const handleAIComplete = async (id: string) => {
     const item = atpData.find(i => i.id === id);
     if (!item || !item.tujuanPembelajaran) return;
-    if (!user.apiKey) { alert("API Key tidak valid."); return; }
 
     setIsProcessingId(id);
     try {
-      const suggestions = await completeATPDetails(user.apiKey, item.tujuanPembelajaran, item.materi, item.kelas);
+      const suggestions = await completeATPDetails(item.tujuanPembelajaran, item.materi, item.kelas);
       if (suggestions) {
         await updateDoc(doc(db, "atp", id), {
           alurTujuanPembelajaran: suggestions.alurTujuan,
@@ -117,7 +117,7 @@ const ATPManager: React.FC<ATPManagerProps> = ({ user }) => {
           asesmenAkhir: suggestions.asesmenAkhir,
           sumberBelajar: suggestions.sumberBelajar
         });
-        setMessage({ text: 'Detail ATP dilengkapi AI personal Anda!', type: 'success' });
+        setMessage({ text: 'Detail ATP dilengkapi AI!', type: 'success' });
         setTimeout(() => setMessage(null), 3000);
       }
     } catch (err) {
@@ -331,7 +331,7 @@ const ATPManager: React.FC<ATPManagerProps> = ({ user }) => {
               <div className="p-3 bg-blue-600 text-white rounded-2xl shadow-lg"><ListTree size={24} /></div>
               <div>
                 <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight leading-none">Alur Tujuan Pembelajaran (ATP)</h2>
-                <p className="text-[10px] text-blue-600 font-black uppercase mt-1">Kuota Personal: @{user.username}</p>
+                <p className="text-[10px] text-blue-600 font-black uppercase mt-1">Sistem Cloud Aktif</p>
               </div>
            </div>
            <div className="flex flex-wrap gap-2">

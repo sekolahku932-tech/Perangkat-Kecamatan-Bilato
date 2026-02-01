@@ -96,14 +96,11 @@ const AnalisisManager: React.FC<AnalisisManagerProps> = ({ user }) => {
       .sort((a, b) => (a.kode || '').localeCompare(b.kode || '', undefined, { numeric: true, sensitivity: 'base' }));
   }, [cps, filterFase, filterMapel]);
 
+  // FIX: Removed apiKey parameter from AI call as per guidelines
   const handleAnalyze = async (cp: CapaianPembelajaran) => {
-    if (!user.apiKey) {
-      setMessage({ text: 'KUNCI API BELUM DIISI. Silakan buka menu Profil.', type: 'error' });
-      return;
-    }
     setIsAnalyzing(true);
     try {
-      const results = await analyzeCPToTP(user.apiKey, cp.deskripsi, cp.elemen, cp.fase, filterKelas);
+      const results = await analyzeCPToTP(cp.deskripsi, cp.elemen, cp.fase, filterKelas);
       if (results && Array.isArray(results)) {
         let lastOrder = filteredAnalisis.length > 0 ? Math.max(...filteredAnalisis.map(a => a.indexOrder || 0)) : 0;
         for (const res of results) {
@@ -130,9 +127,9 @@ const AnalisisManager: React.FC<AnalisisManagerProps> = ({ user }) => {
       console.error("AI Error:", error);
       const detail = error.message || "";
       let userFriendlyMsg = detail;
-      if (detail.includes("429")) userFriendlyMsg = "KUOTA PENUH. Gunakan API Key berbayar atau tunggu 1 menit.";
-      if (detail.includes("location")) userFriendlyMsg = "REGION DIBLOKIR. Vercel berada di wilayah yang tidak didukung akun Free.";
-      if (detail.includes("403")) userFriendlyMsg = "API KEY ERROR. Periksa kembali kunci Anda di Google AI Studio.";
+      if (detail.includes("429")) userFriendlyMsg = "KUOTA PENUH. Silakan tunggu 1 menit.";
+      if (detail.includes("location")) userFriendlyMsg = "REGION DIBLOKIR. Wilayah server tidak didukung.";
+      if (detail.includes("403")) userFriendlyMsg = "API KEY ERROR. Periksa konfigurasi API_KEY.";
       
       setMessage({ text: `AI: ${userFriendlyMsg}`, type: 'error' });
     } finally {
@@ -153,7 +150,7 @@ const AnalisisManager: React.FC<AnalisisManagerProps> = ({ user }) => {
             <style>
               body { font-family: 'Inter', sans-serif; background: white; padding: 40px; font-size: 10pt; }
               @media print { .no-print { display: none !important; } body { padding: 0; } }
-              table { border-collapse: collapse; width: 100%; border: 1.5px solid black; }
+              table { border-collapse: collapse; width: 100%; border: 1px solid black; }
               th, td { border: 1px solid black; padding: 8px; }
             </style>
           </head>
@@ -251,7 +248,7 @@ const AnalisisManager: React.FC<AnalisisManagerProps> = ({ user }) => {
             <div className="p-3 bg-emerald-600 text-white rounded-2xl shadow-lg"><BrainCircuit size={24} /></div>
             <div>
               <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight leading-none">ANALISIS CP-TP CERDAS</h2>
-              <p className="text-[10px] text-emerald-600 font-black uppercase mt-1">Sistem Kuota Personal: @{user.username}</p>
+              <p className="text-[10px] text-emerald-600 font-black uppercase mt-1">Sistem Cloud Aktif</p>
             </div>
           </div>
           <button onClick={() => setIsPrintMode(true)} className="bg-slate-800 text-white px-6 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 hover:bg-black shadow-lg transition-all"><Eye size={18} /> PRATINJAU</button>

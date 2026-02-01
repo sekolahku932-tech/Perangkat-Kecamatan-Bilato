@@ -17,7 +17,6 @@ const UserManager: React.FC<UserManagerProps> = ({ user }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [isEditing, setIsEditing] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [showApiKey, setShowApiKey] = useState(false);
   
   const [formData, setFormData] = useState<Partial<User>>({
     username: '',
@@ -29,7 +28,6 @@ const UserManager: React.FC<UserManagerProps> = ({ user }) => {
     kelas: '',
     school: user.school,
     mapelDiampu: [],
-    apiKey: ''
   });
   
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -85,8 +83,7 @@ const UserManager: React.FC<UserManagerProps> = ({ user }) => {
         nip: formData.nip?.trim() || '-',
         kelas: formData.kelas?.trim() || '-',
         school: user.school, 
-        mapelDiampu: formData.mapelDiampu || [],
-        apiKey: formData.apiKey?.trim() || ''
+        mapelDiampu: formData.mapelDiampu || []
       };
 
       if (isEditing) {
@@ -124,10 +121,8 @@ const UserManager: React.FC<UserManagerProps> = ({ user }) => {
       kelas: '',
       school: user.school,
       mapelDiampu: [],
-      apiKey: ''
     });
     setIsEditing(null);
-    setShowApiKey(false);
   };
 
   const startEdit = (u: User) => {
@@ -223,25 +218,7 @@ const UserManager: React.FC<UserManagerProps> = ({ user }) => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2 ml-1">Kunci Akses AI (API Key)</label>
-                <div className="relative">
-                  <input 
-                    type={showApiKey ? "text" : "password"} 
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3.5 pr-12 text-xs font-mono outline-none focus:ring-2 focus:ring-indigo-600" 
-                    value={formData.apiKey} 
-                    onChange={e => setFormData({...formData, apiKey: e.target.value})} 
-                    placeholder="AIzaSy..." 
-                  />
-                  <button 
-                    type="button"
-                    onClick={() => setShowApiKey(!showApiKey)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 transition-colors"
-                  >
-                    {showApiKey ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
-              </div>
+              {/* FIX: Removed API Key input as it's now handled by process.env.API_KEY */}
 
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-4 ml-1">Mapel Diampu</label>
@@ -297,11 +274,6 @@ const UserManager: React.FC<UserManagerProps> = ({ user }) => {
                       <td className="px-8 py-6">
                         <div className="font-black text-sm uppercase text-slate-900 leading-none mb-1">{u.name}</div>
                         <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">@{u.username} • NIP: {u.nip}</div>
-                        {u.apiKey && (
-                          <div className="mt-2 flex items-center gap-1.5 text-[9px] font-black text-emerald-600 uppercase">
-                            <Key size={10} /> API Key Aktif
-                          </div>
-                        )}
                       </td>
                       <td className="px-8 py-6">
                         <span className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[9px] font-black uppercase">

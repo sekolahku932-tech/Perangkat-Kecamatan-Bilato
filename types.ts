@@ -323,7 +323,7 @@ export const SEMUA_AKTIVITAS = [
 ];
 
 export const DIMENSI_PROFIL = [
-  'Keimanan dan Ketakwaan terhadap Tuhan YME',
+  'Keimanan & Takwa',
   'Kewargaan',
   'Penalaran Kritis',
   'Kreativitas',

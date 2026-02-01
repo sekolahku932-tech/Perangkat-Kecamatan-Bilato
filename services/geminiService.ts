@@ -61,15 +61,15 @@ const cleanAndParseJson = (str: any): any => {
   }
 };
 
-const getAiClient = (apiKey: string) => {
-  if (!apiKey || apiKey.length < 10) throw new Error("KUNCI API TIDAK VALID. Periksa kembali di Profil.");
+const getAiClient = () => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey || apiKey.length < 10) throw new Error("KUNCI API (process.env.API_KEY) TIDAK TERDETEKSI.");
   return new GoogleGenAI({ apiKey });
 };
 
-// GLOBAL MODEL SETTINGS - MENGGUNAKAN GEMINI 3 FLASH UNTUK SEMUANYA
 const MAIN_MODEL = 'gemini-3-flash-preview';
 const IMAGE_MODEL = 'gemini-2.5-flash-image';
-const DPL_LIST = "Beriman, Bertakwa, Berakhlak Mulia, Berkebinekaan Global, Bergotong Royong, Mandiri, Bernalar Kritis, Kreatif";
+const DPL_LIST = "Keimanan & Takwa, Kewargaan, Penalaran Kritis, Kreativitas, Kolaborasi, Kemandirian, Kesehatan, Komunikasi";
 
 const safetySettings = [
   { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
@@ -78,17 +78,17 @@ const safetySettings = [
   { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
 ];
 
-export const startAIChat = async (apiKey: string, systemInstruction: string) => {
-  const ai = getAiClient(apiKey);
+export const startAIChat = async (systemInstruction: string) => {
+  const ai = getAiClient();
   return ai.chats.create({
     model: MAIN_MODEL,
     config: { systemInstruction, temperature: 0.7, safetySettings },
   });
 };
 
-export const analyzeDocuments = async (apiKey: string, files: UploadedFile[], prompt: string) => {
+export const analyzeDocuments = async (files: UploadedFile[], prompt: string) => {
   return callAiWithRetry(async () => {
-    const ai = getAiClient(apiKey);
+    const ai = getAiClient();
     const fileParts = files.map(file => ({
       inlineData: { data: file.base64.split(',')[1], mimeType: file.type }
     }));
@@ -101,10 +101,10 @@ export const analyzeDocuments = async (apiKey: string, files: UploadedFile[], pr
   });
 };
 
-export const analyzeCPToTP = async (apiKey: string, cpContent: string, elemen: string, fase: string, kelas: string) => {
+export const analyzeCPToTP = async (cpContent: string, elemen: string, fase: string, kelas: string) => {
   return callAiWithRetry(async () => {
-    const ai = getAiClient(apiKey);
-    const prompt = `Analisis CP Kelas ${kelas}. CP: "${cpContent}". Elemen: "${elemen}". Gunakan DPL: ${DPL_LIST}. Kembalikan JSON ARRAY.`;
+    const ai = getAiClient();
+    const prompt = `Analisis CP Kelas ${kelas}. CP: "${cpContent}". Elemen: "${elemen}". Gunakan Dimensi Profil Lulusan (DPL): ${DPL_LIST}. Kembalikan JSON ARRAY.`;
 
     const response = await ai.models.generateContent({
       model: MAIN_MODEL,
@@ -119,7 +119,7 @@ export const analyzeCPToTP = async (apiKey: string, cpContent: string, elemen: s
               materi: { type: Type.STRING },
               subMateri: { type: Type.STRING },
               tp: { type: Type.STRING },
-              profilLulusan: { type: Type.STRING }
+              profilLulusan: { type: Type.STRING, description: "Hanya ambil dari DPL: " + DPL_LIST }
             },
             required: ['materi', 'subMateri', 'tp', 'profilLulusan']
           }
@@ -131,9 +131,9 @@ export const analyzeCPToTP = async (apiKey: string, cpContent: string, elemen: s
   });
 };
 
-export const completeATPDetails = async (apiKey: string, tp: string, materi: string, kelas: string) => {
+export const completeATPDetails = async (tp: string, materi: string, kelas: string) => {
   return callAiWithRetry(async () => {
-    const ai = getAiClient(apiKey);
+    const ai = getAiClient();
     const response = await ai.models.generateContent({
       model: MAIN_MODEL,
       config: {
@@ -144,7 +144,7 @@ export const completeATPDetails = async (apiKey: string, tp: string, materi: str
           properties: {
             alurTujuan: { type: Type.STRING },
             alokasiWaktu: { type: Type.STRING },
-            dimensiOfProfil: { type: Type.STRING },
+            dimensiOfProfil: { type: Type.STRING, description: "Hanya ambil dari DPL: " + DPL_LIST },
             asesmenAwal: { type: Type.STRING },
             asesmenProses: { type: Type.STRING },
             asesmenAkhir: { type: Type.STRING },
@@ -153,15 +153,15 @@ export const completeATPDetails = async (apiKey: string, tp: string, materi: str
           required: ['alurTujuan', 'alokasiWaktu', 'dimensiOfProfil', 'asesmenAwal', 'asesmenProses', 'asesmenAkhir', 'sumberBelajar']
         }
       },
-      contents: `Lengkapi ATP: ${tp}, Materi: ${materi}`,
+      contents: `Lengkapi ATP: ${tp}, Materi: ${materi}. Sesuaikan Dimensi Profil Lulusan dengan: ${DPL_LIST}`,
     });
     return cleanAndParseJson(response.text);
   });
 };
 
-export const recommendPedagogy = async (apiKey: string, tp: string, alurAtp: string, materi: string, kelas: string) => {
+export const recommendPedagogy = async (tp: string, alurAtp: string, materi: string, kelas: string) => {
   return callAiWithRetry(async () => {
-    const ai = getAiClient(apiKey);
+    const ai = getAiClient();
     const response = await ai.models.generateContent({
       model: MAIN_MODEL,
       config: {
@@ -179,9 +179,29 @@ export const recommendPedagogy = async (apiKey: string, tp: string, alurAtp: str
   });
 };
 
-export const generateRPMContent = async (apiKey: string, tp: string, materi: string, kelas: string, praktikPedagogis: string, alokasiWaktu: string, jumlahPertemuan: number = 1) => {
+export const generateRPMContent = async (tp: string, materi: string, kelas: string, praktikPedagogis: string, alokasiWaktu: string, jumlahPertemuan: number = 1) => {
   return callAiWithRetry(async () => {
-    const ai = getAiClient(apiKey);
+    const ai = getAiClient();
+    const prompt = `
+      Susun Rencana Pembelajaran Mendalam (RPM) SD Kelas ${kelas}.
+      TP: ${tp}
+      Materi: ${materi}
+      Model: ${praktikPedagogis}
+      Jumlah Pertemuan: ${jumlahPertemuan}
+
+      INSTRUKSI FORMAT OUTPUT (WAJIB):
+      1. Jika Jumlah Pertemuan > 1, bagi narasi per pertemuan dengan label "Pertemuan 1:", "Pertemuan 2:", dst di baris baru.
+      2. Bagian KEGIATAN INTI harus menggunakan Sintak Deep Learning:
+         A. MEMAHAMI
+         B. MENGAPLIKASI
+         C. MEREFLEKSI
+      3. SETIAP LANGKAH HARUS DI BARIS BARU (Gunakan newline \\n).
+      4. Gunakan penomoran "1. ", "2. ", "3. " untuk butir kegiatan.
+      5. JANGAN menuliskan kegiatan dalam satu paragraf panjang. Satu langkah = satu baris baru.
+      6. Akhiri setiap butir langkah pada bagian KEGIATAN (Awal, Inti, Penutup) dengan salah satu tag filosofi: [Berkesadaran], [Bermakna], atau [Menggembirakan].
+      7. PENTING: Untuk bagian Kemitraan, Lingkungan Belajar, dan Digital, JANGAN GUNAKAN tag filosofi ([Bermakna], dll) sama sekali. Tulis narasi deskriptif saja.
+    `;
+
     const response = await ai.models.generateContent({
       model: MAIN_MODEL,
       config: { 
@@ -200,15 +220,33 @@ export const generateRPMContent = async (apiKey: string, tp: string, materi: str
           required: ['kemitraan', 'lingkunganBelajar', 'pemanfaatanDigital', 'kegiatanAwal', 'kegiatanInti', 'kegiatanPenutup']
         }
       },
-      contents: `Susun RPM ${jumlahPertemuan} pertemuan: ${tp}`,
+      contents: prompt,
     });
     return cleanAndParseJson(response.text);
   });
 };
 
-export const generateJournalNarrative = async (apiKey: string, kelas: string, mapel: string, materi: string, refRpm?: any) => {
+export const generateJournalNarrative = async (kelas: string, mapel: string, materi: string, refRpm?: any) => {
   return callAiWithRetry(async () => {
-    const ai = getAiClient(apiKey);
+    const ai = getAiClient();
+    let rpmContext = "";
+    if (refRpm) {
+      rpmContext = `Kegiatan Inti dari RPM: ${refRpm.kegiatanInti}. Model: ${refRpm.praktikPedagogis}.`;
+    }
+
+    const prompt = `
+      Buat narasi ringkas untuk Jurnal Harian Mengajar SD.
+      Kelas: ${kelas}
+      Mata Pelajaran: ${mapel}
+      Materi: ${materi}
+      ${rpmContext ? `Referensi Kegiatan: ${rpmContext}` : ''}
+
+      INSTRUKSI:
+      1. Jika ada referensi Kegiatan Inti, buatlah RANGKUMAN dari kegiatan tersebut menjadi 2-3 kalimat efektif.
+      2. Jangan gunakan poin-poin (bullet points).
+      3. Jika ada model pembelajaran di referensi, gunakan model tersebut.
+    `;
+
     const response = await ai.models.generateContent({
       model: MAIN_MODEL,
       config: {
@@ -216,19 +254,36 @@ export const generateJournalNarrative = async (apiKey: string, kelas: string, ma
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
-          properties: { detail_kegiatan: { type: Type.STRING }, pedagogik: { type: Type.STRING } },
+          properties: { 
+            detail_kegiatan: { type: Type.STRING, description: "Rangkuman deskriptif pelaksanaan pembelajaran." }, 
+            pedagogik: { type: Type.STRING, description: "Model atau strategi yang digunakan." } 
+          },
           required: ['detail_kegiatan', 'pedagogik']
         }
       },
-      contents: `Buat narasi jurnal: Kelas ${kelas}, ${materi}`,
+      contents: prompt,
     });
     return cleanAndParseJson(response.text);
   });
 };
 
-export const generateAssessmentDetails = async (apiKey: string, tp: string, materi: string, kelas: string, stepsContext: string) => {
+export const generateAssessmentDetails = async (tp: string, materi: string, kelas: string, stepsContext: string, jumlahPertemuan: number = 1) => {
   return callAiWithRetry(async () => {
-    const ai = getAiClient(apiKey);
+    const ai = getAiClient();
+    const prompt = `
+      Buat Strategi Asesmen Lengkap untuk TP: ${tp}
+      Materi: ${materi}
+      Konteks Langkah Pembelajaran (${jumlahPertemuan} Pertemuan): ${stepsContext}
+      
+      INSTRUKSI KATEGORI WAJIB:
+      Anda HARUS menghasilkan rincian instrumen untuk 3 kategori berikut secara eksklusif:
+      1. "ASESMEN AWAL": Berisi teknik diagnosis kesiapan siswa.
+      2. "ASESMEN PROSES": Berisi teknik penilaian formatif selama KBM berlangsung.
+      3. "ASESMEN AKHIR": Berisi teknik penilaian sumatif untuk mengukur ketercapaian TP.
+
+      Pastikan setiap objek dalam array hasil memiliki property 'kategori' dengan salah satu dari 3 nilai di atas.
+    `;
+
     const response = await ai.models.generateContent({
       model: MAIN_MODEL,
       config: { 
@@ -239,7 +294,7 @@ export const generateAssessmentDetails = async (apiKey: string, tp: string, mate
           items: {
             type: Type.OBJECT,
             properties: {
-              kategori: { type: Type.STRING },
+              kategori: { type: Type.STRING, description: "Hanya boleh: ASESMEN AWAL, ASESMEN PROSES, atau ASESMEN AKHIR" },
               teknik: { type: Type.STRING },
               bentuk: { type: Type.STRING },
               instruksi: { type: Type.STRING },
@@ -263,15 +318,15 @@ export const generateAssessmentDetails = async (apiKey: string, tp: string, mate
           }
         }
       },
-      contents: `Asesmen untuk: ${tp}`,
+      contents: prompt,
     });
     return cleanAndParseJson(response.text);
   });
 };
 
-export const generateLKPDContent = async (apiKey: string, rpm: any) => {
+export const generateLKPDContent = async (rpm: any) => {
   return callAiWithRetry(async () => {
-    const ai = getAiClient(apiKey);
+    const ai = getAiClient();
     const response = await ai.models.generateContent({
       model: MAIN_MODEL,
       config: { 
@@ -296,9 +351,9 @@ export const generateLKPDContent = async (apiKey: string, rpm: any) => {
   });
 };
 
-export const generateIndikatorSoal = async (apiKey: string, item: any) => {
+export const generateIndikatorSoal = async (item: any) => {
   return callAiWithRetry(async () => {
-    const ai = getAiClient(apiKey);
+    const ai = getAiClient();
     const response = await ai.models.generateContent({
       model: MAIN_MODEL,
       config: { safetySettings },
@@ -308,9 +363,9 @@ export const generateIndikatorSoal = async (apiKey: string, item: any) => {
   });
 };
 
-export const generateButirSoal = async (apiKey: string, item: any) => {
+export const generateButirSoal = async (item: any) => {
   return callAiWithRetry(async () => {
-    const ai = getAiClient(apiKey);
+    const ai = getAiClient();
     const response = await ai.models.generateContent({
       model: MAIN_MODEL,
       config: {
@@ -328,9 +383,9 @@ export const generateButirSoal = async (apiKey: string, item: any) => {
   });
 };
 
-export const generateAiImage = async (apiKey: string, prompt: string, kelas: string) => {
+export const generateAiImage = async (prompt: string, kelas: string) => {
   return callAiWithRetry(async () => {
-    const ai = getAiClient(apiKey);
+    const ai = getAiClient();
     const response = await ai.models.generateContent({
       model: IMAGE_MODEL,
       contents: { parts: [{ text: `Ilustrasi SD Kelas ${kelas}: ${prompt}. Flat vector style.` }] },

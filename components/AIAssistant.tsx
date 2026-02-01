@@ -24,7 +24,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ user }) => {
   const [isMinimized, setIsMinimized] = useState(false);
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'model', text: `Halo Bapak/Ibu ${user.name.split(' ')[0]}, ada yang bisa saya bantu hari ini? (Kuota: Personal)` }
+    { role: 'model', text: `Halo Bapak/Ibu ${user.name.split(' ')[0]}, ada yang bisa saya bantu hari ini?` }
   ]);
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -34,12 +34,9 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ user }) => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
 
+  // FIX: Removed apiKey check and parameter as per guidelines
   const handleSendMessage = async () => {
     if (!input.trim() || isLoading) return;
-    if (!user.apiKey) {
-      setMessages(prev => [...prev, { role: 'model', text: 'Sistem Terkunci. Silakan masukkan API Key personal Anda.', isError: true }]);
-      return;
-    }
 
     const userMessage = input;
     setInput('');
@@ -48,7 +45,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ user }) => {
 
     try {
       if (!chatInstance.current) {
-        chatInstance.current = await startAIChat(user.apiKey, `Anda asisten AI di ${user.school}. Membantu guru: ${user.name}.`);
+        chatInstance.current = await startAIChat(`Anda asisten AI di ${user.school}. Membantu guru: ${user.name}.`);
       }
       const result = await chatInstance.current.sendMessageStream({ message: userMessage });
       let fullText = '';
@@ -62,7 +59,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ user }) => {
         });
       }
     } catch (e: any) {
-      setMessages(prev => [...prev, { role: 'model', text: 'Error Layanan Personal: ' + e.message, isError: true }]);
+      setMessages(prev => [...prev, { role: 'model', text: 'Error Layanan AI: ' + e.message, isError: true }]);
       chatInstance.current = null;
     } finally { setIsLoading(false); }
   };
@@ -72,7 +69,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ user }) => {
   return (
     <div className={`fixed bottom-6 right-6 w-full max-w-[420px] bg-white rounded-[32px] shadow-2xl border flex flex-col z-[200] transition-all ${isMinimized ? 'h-[72px]' : 'h-[600px]'}`}>
       <div className="p-5 bg-slate-900 text-white flex justify-between items-center shrink-0">
-        <div className="flex items-center gap-3"><SparklesIcon size={18} /><h3 className="text-xs font-black uppercase tracking-widest">Asisten Personal</h3></div>
+        <div className="flex items-center gap-3"><SparklesIcon size={18} /><h3 className="text-xs font-black uppercase tracking-widest">Asisten Kurikulum</h3></div>
         <div className="flex gap-1"><button onClick={() => setIsMinimized(!isMinimized)}>{isMinimized ? <MaxIcon size={16}/> : <MinIcon size={16}/>}</button><button onClick={() => setIsOpen(false)}><XIcon size={16} /></button></div>
       </div>
       {!isMinimized && (
