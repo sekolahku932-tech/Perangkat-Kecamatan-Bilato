@@ -26,7 +26,7 @@ async function callAiWithRetry(fn: () => Promise<any>, retries = 4, delay = 3000
     
     // Jika error karena lokasi (403), berikan pesan yang jelas
     if (errorMsg.includes("location") || errorMsg.includes("403")) {
-      throw new Error("Layanan AI tidak tersedia di wilayah server ini (Region Block). Gunakan API Key yang sudah diaktivasi Billing.");
+      throw new Error("Layanan AI tidak tersedia di wilayah server ini (Region Block). Pastikan API Key benar dan dukung region ini.");
     }
     
     throw error;
@@ -61,10 +61,15 @@ const cleanAndParseJson = (str: any): any => {
   }
 };
 
+/**
+ * Inisialisasi client AI menggunakan process.env.API_KEY yang telah didefinisikan di vite.config.ts
+ */
 const getAiClient = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey || apiKey.length < 10) throw new Error("KUNCI API (process.env.API_KEY) TIDAK TERDETEKSI.");
-  return new GoogleGenAI({ apiKey });
+  const key = process.env.API_KEY;
+  if (!key) {
+    throw new Error("API_KEY tidak ditemukan di environment. Pastikan sudah diatur di Dashboard Vercel.");
+  }
+  return new GoogleGenAI({ apiKey: key });
 };
 
 const MAIN_MODEL = 'gemini-3-flash-preview';
