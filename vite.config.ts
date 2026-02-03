@@ -8,9 +8,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export default defineConfig(({ mode }) => {
-    // Load env file based on `mode` in the current working directory.
+    // Load env file based on `mode`
     const env = loadEnv(mode, path.resolve(), '');
     
+    // Ambil API Key dari berbagai kemungkinan nama variabel di Vercel
+    const finalApiKey = env.API_KEY || env.VITE_API_KEY || env.GEMINI_API_KEY || process.env.API_KEY || "";
+
     return {
       server: {
         port: 3000,
@@ -18,14 +21,8 @@ export default defineConfig(({ mode }) => {
       },
       plugins: [react()],
       define: {
-        // Mendefinisikan process.env.API_KEY agar tersedia di client-side.
-        // Mencari di file .env (env.API_KEY) atau di variabel sistem/Vercel (process.env.API_KEY)
-        'process.env.API_KEY': JSON.stringify(
-          env.API_KEY || 
-          env.GEMINI_API_KEY || 
-          process.env.API_KEY || 
-          process.env.GEMINI_API_KEY
-        ),
+        // Mendefinisikan process.env secara global agar tersedia di browser
+        'process.env.API_KEY': JSON.stringify(finalApiKey),
       },
       resolve: {
         alias: {

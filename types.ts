@@ -29,7 +29,6 @@ export interface User {
   kelas: string;
   school: string;
   mapelDiampu: string[];
-  apiKey?: string;
 }
 
 export interface Siswa {
