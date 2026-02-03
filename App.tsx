@@ -25,6 +25,7 @@ import AsesmenManager from './components/AsesmenManager';
 import AIAssistant from './components/AIAssistant';
 import LoginPage from './components/LoginPage';
 import SchoolSelectionPage from './components/SchoolSelectionPage';
+import KeyLockScreen from './components/KeyLockScreen';
 import { User } from './types';
 import { auth, db, onAuthStateChanged, signOut, doc, onSnapshot, getFirebaseInstance } from './services/firebase';
 
@@ -129,7 +130,10 @@ const App: React.FC = () => {
     />
   );
 
-  // FIX: API Key is now handled via process.env.API_KEY as per coding guidelines, removed KeyLockScreen requirement
+  // WAJIB API KEY: Guru tidak dapat mengakses sistem jika API Key personal belum diinput
+  if (!user.apiKey || user.apiKey.length < 10) {
+    return <KeyLockScreen user={user} />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex overflow-hidden">

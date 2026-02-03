@@ -24,6 +24,10 @@ import {
   Firestore
 } from 'firebase/firestore';
 
+/**
+ * MASTER CONFIGURATION MAP
+ * Masukkan konfigurasi dari masing-masing Akun Google / Project Firebase sekolah di sini.
+ */
 const SCHOOL_CONFIGS: Record<string, any> = {
   'SD NEGERI 1 BILATO': {
     apiKey: "AIzaSyCRaA4LfVijSWE8U7y0URSy8YqAi5ibDlc",
@@ -34,9 +38,23 @@ const SCHOOL_CONFIGS: Record<string, any> = {
     appId: "1:475024977370:web:7772ef97c0fdab3f68a4e3"
   },
   'SD NEGERI 2 BILATO': {
-    apiKey: "AIzaSyB-Dk...", // Contoh, pastikan diisi aslinya
+    apiKey: "PASTE_API_KEY_SDN2_DISINI", // GANTI INI DENGAN API KEY DARI AKUN SDN 2
     authDomain: "sdn2-bilato.firebaseapp.com",
     projectId: "sdn2-bilato",
+    storageBucket: "sdn2-bilato.firebasestorage.app",
+    messagingSenderId: "...",
+    appId: "..."
+  },
+  'SD NEGERI 3 BILATO': {
+    apiKey: "PASTE_API_KEY_SDN3_DISINI",
+    authDomain: "sdn3-bilato.firebaseapp.com",
+    projectId: "sdn3-bilato",
+    // ...
+  },
+  'SD NEGERI 4 BILATO': {
+    apiKey: "PASTE_API_KEY_SDN4_DISINI",
+    authDomain: "sdn4-bilato.firebaseapp.com",
+    projectId: "sdn4-bilato",
   },
   'SD NEGERI 5 BILATO': {
     apiKey: "AIzaSyBvH3mqRH1iXL3kNXkq-ZgLN9uB9cNiHSc",
@@ -48,22 +66,45 @@ const SCHOOL_CONFIGS: Record<string, any> = {
     authDomain: "perangkat-16de6.firebaseapp.com",
     projectId: "perangkat-16de6",
   },
+  'SD NEGERI 7 BILATO': {
+    apiKey: "PASTE_API_KEY_SDN7_DISINI",
+    authDomain: "sdn7-bilato.firebaseapp.com",
+    projectId: "sdn7-bilato",
+  },
+  'SD NEGERI 8 BILATO': {
+    apiKey: "PASTE_API_KEY_SDN8_DISINI",
+    authDomain: "sdn8-bilato.firebaseapp.com",
+    projectId: "sdn8-bilato",
+  }
 };
 
+/**
+ * Cek apakah konfigurasi sekolah sudah diisi dengan benar (bukan placeholder)
+ */
 export const isSchoolConfigured = (school: string): boolean => {
   const config = SCHOOL_CONFIGS[school];
-  return !!(config && config.apiKey && !config.apiKey.startsWith('PASTE_'));
+  if (!config) return false;
+  return config.apiKey && !config.apiKey.startsWith('PASTE_');
 };
 
+/**
+ * Dynamic Instance Manager
+ */
 export const getFirebaseInstance = () => {
   const selectedSchool = localStorage.getItem('selected_school') || 'SD NEGERI 1 BILATO';
-  const config = SCHOOL_CONFIGS[selectedSchool] || SCHOOL_CONFIGS['SD NEGERI 1 BILATO'];
+  
+  // Jika belum dikonfigurasi, gunakan SDN 1 sebagai basis (agar tidak crash)
+  // Namun LoginPage akan mencegah user masuk jika belum dikonfigurasi.
+  const config = isSchoolConfigured(selectedSchool) 
+    ? SCHOOL_CONFIGS[selectedSchool] 
+    : SCHOOL_CONFIGS['SD NEGERI 1 BILATO'];
+  
   const appName = selectedSchool.replace(/\s+/g, '_');
   
   let app: FirebaseApp;
-  try {
-    app = getApps().find(a => a.name === appName) || initializeApp(config, appName);
-  } catch (e) {
+  if (!getApps().find(a => a.name === appName)) {
+    app = initializeApp(config, appName);
+  } else {
     app = getApp(appName);
   }
 
@@ -74,6 +115,9 @@ export const getFirebaseInstance = () => {
   };
 };
 
+/**
+ * Proxy Objects dengan validasi
+ */
 export const auth = new Proxy({} as Auth, {
   get: (target, prop) => {
     const instance = getFirebaseInstance().auth;
@@ -90,16 +134,13 @@ export const db = new Proxy({} as Firestore, {
   }
 });
 
+// Wrapped Helper Methods
 export const collection = (dbInstance: any, path: string) => firestoreCollection(getFirebaseInstance().db, path);
 export const doc = (dbOrColl: any, pathOrId: string, id?: string) => {
   if (id) return firestoreDoc(firestoreCollection(getFirebaseInstance().db, pathOrId), id);
   return firestoreDoc(getFirebaseInstance().db, pathOrId);
 };
-export const onSnapshot = (ref: any, onNext: any, onError?: any) => firesnapshot(ref, onNext, (error) => {
-  console.warn("Firestore Permission/Sync Warning:", error.message);
-  if (onError) onError(error);
-});
-
+export const onSnapshot = (ref: any, onNext: any, onError?: any) => firesnapshot(ref, onNext, onError);
 export const getDoc = (ref: any) => firestoreGetDoc(ref);
 export const getDocs = (ref: any) => firestoreGetDocs(ref);
 export const addDoc = (ref: any, data: any) => firestoreAddDoc(ref, data);
@@ -109,5 +150,11 @@ export const deleteDoc = (ref: any) => firestoreDeleteDoc(ref);
 export const query = (ref: any, ...constraints: any[]) => firestoreQuery(ref, ...constraints);
 export const where = (field: string, op: any, value: any) => firestoreWhere(field, op, value);
 
-export { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, firebaseSignOut as signOut };
+export { 
+  onAuthStateChanged, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword,
+  firebaseSignOut as signOut 
+};
+
 export const registerAuth = auth;

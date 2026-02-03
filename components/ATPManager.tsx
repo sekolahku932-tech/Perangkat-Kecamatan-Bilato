@@ -99,14 +99,17 @@ const ATPManager: React.FC<ATPManagerProps> = ({ user }) => {
       .sort((a, b) => (a.indexOrder || 0) - (b.indexOrder || 0));
   }, [atpData, filterFase, filterKelas, filterMapel]);
 
-  // FIX: Removed apiKey parameter from AI call as per guidelines
   const handleAIComplete = async (id: string) => {
     const item = atpData.find(i => i.id === id);
     if (!item || !item.tujuanPembelajaran) return;
+    if (!user.apiKey) {
+      setMessage({ text: 'API Key Personal Belum Diatur!', type: 'error' });
+      return;
+    }
 
     setIsProcessingId(id);
     try {
-      const suggestions = await completeATPDetails(item.tujuanPembelajaran, item.materi, item.kelas);
+      const suggestions = await completeATPDetails(item.tujuanPembelajaran, item.materi, item.kelas, user.apiKey);
       if (suggestions) {
         await updateDoc(doc(db, "atp", id), {
           alurTujuanPembelajaran: suggestions.alurTujuan,

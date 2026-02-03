@@ -82,7 +82,6 @@ const LKPDManager: React.FC<LKPDManagerProps> = ({ user }) => {
     );
   }, [lkpdList, filterKelas, filterMapel, filterSemester]);
 
-  // RPM yang tersedia untuk dipicker sesuai filter aktif
   const availableRpmOptions = useMemo(() => {
     const currentMapelNormalized = filterMapel.trim().toLowerCase();
     return rpmList.filter(r => 
@@ -103,10 +102,14 @@ const LKPDManager: React.FC<LKPDManagerProps> = ({ user }) => {
     if (!lkpd) return;
     const rpm = rpmList.find(r => r.id === lkpd.rpmId);
     if (!rpm) return;
+    if (!user.apiKey) {
+      setMessage({ text: 'API Key Personal Belum Diatur!', type: 'error' });
+      return;
+    }
 
     setIsLoadingAI(true);
     try {
-      const result = await generateLKPDContent(rpm);
+      const result = await generateLKPDContent(rpm, user.apiKey);
       if (result) {
         await updateDoc(doc(db, "lkpd", id), { ...result });
         setMessage({ text: 'Konten LKPD Sinkron AI Berhasil!', type: 'success' });

@@ -50,24 +50,26 @@ const AsesmenManager: React.FC<AsesmenManagerProps> = ({ type, user }) => {
     return () => { unsubKisi(); unsubAtp(); };
   }, [user.id]);
 
-  // FIX: Removed apiKey parameter from AI calls as per guidelines
   const generateIndikatorAI = async (item: KisiKisiItem) => {
     if (!item.tujuanPembelajaran) return;
+    if (!user.apiKey) return;
+
     setAiLoadingMap(prev => ({ ...prev, [`ind-${item.id}`]: true }));
     try {
-      const indikator = await generateIndikatorSoal(item);
+      const indikator = await generateIndikatorSoal(item, user.apiKey);
       if (indikator) await updateDoc(doc(db, "kisikisi", item.id), { indikatorSoal: indikator });
     } catch (e: any) { setMessage({ text: "AI Gagal Memproses.", type: "error" }); } finally { 
       setAiLoadingMap(prev => ({ ...prev, [`ind-${item.id}`]: false })); 
     }
   };
 
-  // FIX: Removed apiKey parameter from AI calls as per guidelines
   const generateSoalAI = async (item: KisiKisiItem) => {
     if (!item.indikatorSoal) return;
+    if (!user.apiKey) return;
+
     setAiLoadingMap(prev => ({ ...prev, [`soal-${item.id}`]: true }));
     try {
-      const result = await generateButirSoal(item);
+      const result = await generateButirSoal(item, user.apiKey);
       if (result) {
         await updateDoc(doc(db, "kisikisi", item.id), { 
           stimulus: result.stimulus || "",
@@ -82,12 +84,12 @@ const AsesmenManager: React.FC<AsesmenManagerProps> = ({ type, user }) => {
     }
   };
 
-  // FIX: Removed apiKey parameter from AI calls as per guidelines
   const triggerImageAI = async (item: KisiKisiItem) => {
+     if (!user.apiKey) return;
      setAiLoadingMap(prev => ({ ...prev, [`img-${item.id}`]: true }));
      try {
         const context = item.stimulus || item.indikatorSoal;
-        const base64 = await generateAiImage(context, kelas);
+        const base64 = await generateAiImage(context, kelas, user.apiKey);
         if (base64) await updateDoc(doc(db, "kisikisi", item.id), { stimulusImage: base64 });
      } catch (e) { console.error(e); } finally {
         setAiLoadingMap(prev => ({ ...prev, [`img-${item.id}`]: false }));

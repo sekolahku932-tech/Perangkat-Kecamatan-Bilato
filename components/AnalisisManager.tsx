@@ -96,11 +96,15 @@ const AnalisisManager: React.FC<AnalisisManagerProps> = ({ user }) => {
       .sort((a, b) => (a.kode || '').localeCompare(b.kode || '', undefined, { numeric: true, sensitivity: 'base' }));
   }, [cps, filterFase, filterMapel]);
 
-  // FIX: Removed apiKey parameter from AI call as per guidelines
   const handleAnalyze = async (cp: CapaianPembelajaran) => {
+    if (!user.apiKey) {
+      setMessage({ text: 'API Key Personal Belum Diatur!', type: 'error' });
+      return;
+    }
+
     setIsAnalyzing(true);
     try {
-      const results = await analyzeCPToTP(cp.deskripsi, cp.elemen, cp.fase, filterKelas);
+      const results = await analyzeCPToTP(cp.deskripsi, cp.elemen, cp.fase, filterKelas, user.apiKey);
       if (results && Array.isArray(results)) {
         let lastOrder = filteredAnalisis.length > 0 ? Math.max(...filteredAnalisis.map(a => a.indexOrder || 0)) : 0;
         for (const res of results) {
@@ -150,7 +154,7 @@ const AnalisisManager: React.FC<AnalisisManagerProps> = ({ user }) => {
             <style>
               body { font-family: 'Inter', sans-serif; background: white; padding: 40px; font-size: 10pt; }
               @media print { .no-print { display: none !important; } body { padding: 0; } }
-              table { border-collapse: collapse; width: 100%; border: 1px solid black; }
+              table { border-collapse: collapse; width: 100%; border: 1.5px solid black; }
               th, td { border: 1px solid black; padding: 8px; }
             </style>
           </head>
@@ -289,7 +293,7 @@ const AnalisisManager: React.FC<AnalisisManagerProps> = ({ user }) => {
                   <span className="bg-white border border-slate-200 px-2 py-1 rounded text-[9px] font-black text-slate-500 uppercase">{cp.kode}</span>
                   <h4 className="text-[10px] font-black text-slate-800 uppercase text-right leading-tight">{cp.elemen}</h4>
                 </div>
-                <p className="text-[11px] leading-relaxed text-slate-600 line-clamp-4 italic">"{cp.deskripsi}"</p>
+                <p className="text-[11px] font-medium leading-relaxed text-slate-600 line-clamp-4 italic">"{cp.deskripsi}"</p>
                 <button 
                   onClick={() => handleAnalyze(cp)} 
                   disabled={isAnalyzing} 
