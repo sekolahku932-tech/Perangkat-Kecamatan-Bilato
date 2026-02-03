@@ -5,7 +5,7 @@ import {
   Trash2, Edit2, Save, X, Users, UserCheck, 
   AlertTriangle, Loader2, Search, CheckSquare, Square, Key, Eye, EyeOff
 } from 'lucide-react';
-import { db, registerAuth, collection, onSnapshot, doc, setDoc, deleteDoc, createUserWithEmailAndPassword, signOut } from '../services/firebase';
+import { db, registerAuth, collection, onSnapshot, doc, setDoc, deleteDoc, createUserWithEmailAndPassword, signOut, query, where } from '../services/firebase';
 
 interface UserManagerProps {
   user: User;
@@ -17,6 +17,7 @@ const UserManager: React.FC<UserManagerProps> = ({ user }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [isEditing, setIsEditing] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showApiKey, setShowApiKey] = useState(false);
   
   const [formData, setFormData] = useState<Partial<User>>({
     username: '',
@@ -28,18 +29,25 @@ const UserManager: React.FC<UserManagerProps> = ({ user }) => {
     kelas: '',
     school: user.school,
     mapelDiampu: [],
+    apiKey: '',
   });
   
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "users"), (snap) => {
+    // Memperbaiki query untuk hanya mengambil user di sekolah yang sama
+    // Ini membantu menghindari error 'Missing or insufficient permissions' jika rules membatasi akses lintas sekolah
+    const q = query(collection(db, "users"), where("school", "==", user.school));
+    const unsub = onSnapshot(q, (snap) => {
       const userList = snap.docs.map(d => ({ id: d.id, ...d.data() })) as User[];
       setUsers(userList);
       setLoading(false);
+    }, (error) => {
+      console.error("Firestore Sync Error:", error);
+      setLoading(false);
     });
     return () => unsub();
-  }, []);
+  }, [user.school]);
 
   const getSchoolSlug = (name: string) => {
     const match = name.match(/(\d+)/);
@@ -48,12 +56,10 @@ const UserManager: React.FC<UserManagerProps> = ({ user }) => {
 
   const filteredUsers = useMemo(() => {
     return users.filter(u => 
-      u.school === user.school && (
-        u.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        u.username?.toLowerCase().includes(searchTerm.toLowerCase())
-      )
+      u.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      u.username?.toLowerCase().includes(searchTerm.toLowerCase())
     ).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-  }, [users, searchTerm, user.school]);
+  }, [users, searchTerm]);
 
   const handleSave = async () => {
     const cleanUsername = formData.username?.trim().toLowerCase();
@@ -83,7 +89,8 @@ const UserManager: React.FC<UserManagerProps> = ({ user }) => {
         nip: formData.nip?.trim() || '-',
         kelas: formData.kelas?.trim() || '-',
         school: user.school, 
-        mapelDiampu: formData.mapelDiampu || []
+        mapelDiampu: formData.mapelDiampu || [],
+        apiKey: formData.apiKey?.trim() || ''
       };
 
       if (isEditing) {
@@ -121,8 +128,10 @@ const UserManager: React.FC<UserManagerProps> = ({ user }) => {
       kelas: '',
       school: user.school,
       mapelDiampu: [],
+      apiKey: '',
     });
     setIsEditing(null);
+    setShowApiKey(false);
   };
 
   const startEdit = (u: User) => {
@@ -218,7 +227,29 @@ const UserManager: React.FC<UserManagerProps> = ({ user }) => {
                 </div>
               </div>
 
-              {/* FIX: Removed API Key input as it's now handled by process.env.API_KEY */}
+              <div className="relative">
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2 ml-1">Gemini API Key (Personal)</label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
+                    <Key size={16} />
+                  </div>
+                  <input 
+                    type={showApiKey ? "text" : "password"} 
+                    className="w-full border border-slate-200 rounded-2xl py-3.5 pl-11 pr-12 text-xs font-mono focus:ring-2 focus:ring-indigo-600 outline-none" 
+                    value={formData.apiKey || ''} 
+                    onChange={e => setFormData({...formData, apiKey: e.target.value})} 
+                    placeholder="AIzaSy..." 
+                  />
+                  <button 
+                    type="button"
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-indigo-600 transition-colors"
+                  >
+                    {showApiKey ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                <p className="text-[9px] text-slate-400 mt-1.5 ml-1 italic font-medium">Opsional. Biarkan kosong untuk menggunakan kunci default sistem.</p>
+              </div>
 
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-4 ml-1">Mapel Diampu</label>
@@ -265,6 +296,7 @@ const UserManager: React.FC<UserManagerProps> = ({ user }) => {
                   <tr className="bg-slate-50/50 text-[10px] font-black text-slate-400 uppercase tracking-widest h-14">
                     <th className="px-8 py-2">Informasi Profil</th>
                     <th className="px-8 py-2">Tugas & Kelas</th>
+                    <th className="px-8 py-2">Status Cloud</th>
                     <th className="px-8 py-2 text-right">Aksi</th>
                   </tr>
                 </thead>
@@ -280,6 +312,14 @@ const UserManager: React.FC<UserManagerProps> = ({ user }) => {
                           Kelas {u.kelas}
                         </span>
                       </td>
+                      <td className="px-8 py-6">
+                        <div className="flex items-center gap-2">
+                           <div className={`w-2 h-2 rounded-full ${u.apiKey ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-300'}`}></div>
+                           <span className={`text-[9px] font-black uppercase ${u.apiKey ? 'text-emerald-600' : 'text-slate-400'}`}>
+                              {u.apiKey ? 'Personal Key Active' : 'System Key'}
+                           </span>
+                        </div>
+                      </td>
                       <td className="px-8 py-6 text-right">
                         <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button onClick={() => startEdit(u)} className="p-2.5 text-blue-600 bg-blue-50 rounded-xl hover:bg-blue-600 hover:text-white transition-all"><Edit2 size={18} /></button>
@@ -288,6 +328,11 @@ const UserManager: React.FC<UserManagerProps> = ({ user }) => {
                       </td>
                     </tr>
                   ))}
+                  {filteredUsers.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="py-20 text-center text-slate-300 font-bold uppercase text-[10px] tracking-widest">Tidak ada data guru ditemukan</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
